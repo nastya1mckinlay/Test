@@ -24,6 +24,7 @@ else:
 
 BASE_DATA = data.copy()
 
+
 def generate_demo_data(days=30, case='balanced'):
     demo_data = []
     start_date = datetime.datetime.now() - datetime.timedelta(days=days-1)
@@ -56,15 +57,35 @@ def generate_demo_data(days=30, case='balanced'):
 
     return pd.DataFrame(demo_data)
 
+
+def compute_insights(data_df):
+    insight = []
+    recent = data_df.tail(5)
+    if recent['Mood'].mean() > 3.5:
+        insight.append("😊 You're on a roll! Mood's been great lately.")
+    if 'Sugary' in ','.join(recent['Foods']):
+        insight.append("🍭 High sugar intake might be affecting energy consistency.")
+    if 'Exercise' in ','.join(recent['Activities']):
+        insight.append("💪 Days with exercise usually show higher energy.")
+    if not insight:
+        insight = ["📊 Not enough data yet to detect trends. Keep logging!"]
+    return insight
+
+
+def plot_trend_graph(data_df):
+    fig = px.line(data_df, x='Date', y=['Mood', 'Energy'], title='Mood & Energy Over Time')
+    return fig
+
+
 app.layout = html.Div([
-    html.H1("\ud83c\udf31 MindFuel: Mood & Health Predictor", style={'textAlign': 'center'}),
+    html.H1("🌱 MindFuel: Mood & Health Predictor", style={'textAlign': 'center'}),
 
     dcc.Store(id='last-submit-time', data=None),
     dcc.Store(id='data-store', data=data.to_dict('records')),
     dcc.Interval(id='interval-component', interval=1000, n_intervals=0),
 
     html.Div([
-        html.H3("\ud83d\udccb Log Your Day"),
+        html.H3("📋 Log Your Day"),
         html.Label("Food Tags:"),
         dcc.Dropdown(food_tags, multi=True, id='food-input'),
         html.Label("Activities:"),
@@ -83,7 +104,7 @@ app.layout = html.Div([
         html.Div(id='submit-timer', style={'color': 'red', 'marginTop': '10px'}),
 
         html.Hr(),
-        html.Label("\ud83d\udd04 Switch Demo Case:"),
+        html.Label("🔄 Switch Demo Case:"),
         dcc.Dropdown(
             options=[
                 {'label': 'Balanced', 'value': 'balanced'},
@@ -96,12 +117,13 @@ app.layout = html.Div([
         )
     ], style={'width': '80%', 'margin': 'auto'}),
 
-    html.H3("\ud83d\udcc8 Mood & Energy Trends"),
+    html.H3("📈 Mood & Energy Trends"),
     dcc.Graph(id='trend-graph'),
 
-    html.H3("\ud83e\udde0 Predictive Insight"),
+    html.H3("🧠 Predictive Insight"),
     html.Div(id='insight-output', style={"padding": "10px", "border": "1px solid #ccc", "borderRadius": "10px"})
 ])
+
 
 @app.callback(
     Output('data-store', 'data'),
@@ -135,6 +157,7 @@ def submit_data(n, foods, acts, mood, energy, last_submit, data_records):
 
     return data_df.to_dict('records'), now
 
+
 @app.callback(
     Output('data-store', 'data'),
     Input('demo-case-selector', 'value')
@@ -143,6 +166,7 @@ def switch_demo_case(case):
     data_df = generate_demo_data(days=30, case=case)
     data_df.to_csv(DATA_FILE, index=False)
     return data_df.to_dict('records')
+
 
 @app.callback(
     Output('data-store', 'data'),
@@ -154,41 +178,24 @@ def reset_data(n_clicks):
     data_df.to_csv(DATA_FILE, index=False)
     return data_df.to_dict('records')
 
+
 @app.callback(
     Output('trend-graph', 'figure'),
     Output('insight-output', 'children'),
-    Input('data-store', 'data'),
-    Input('demo-case-selector', 'value')
+    Input('data-store', 'data')
 )
-def render_graph_insights(data_records, case):
+def render_graph_insights(data_records):
     data_df = pd.DataFrame(data_records)
-
-    color_map = {
-        'balanced': {'Mood': 'blue', 'Energy': 'green'},
-        'high-energy': {'Mood': 'purple', 'Energy': 'orange'},
-        'low-energy': {'Mood': 'grey', 'Energy': 'brown'},
-        'sugar-crash': {'Mood': 'red', 'Energy': 'yellow'}
-    }
 
     if data_df.empty:
         fig = px.line(title="No data available yet.")
-        return fig, html.Ul([html.Li("\ud83d\udcca No data to show. Start logging!")])
+        return fig, html.Ul([html.Li("📊 No data to show. Start logging!")])
 
-    fig = px.line(data_df, x='Date', y=['Mood', 'Energy'], title='Mood & Energy Over Time',
-                  color_discrete_map=color_map.get(case, {'Mood': 'blue', 'Energy': 'green'}))
-
-    insight = []
-    recent = data_df.tail(5)
-    if recent['Mood'].mean() > 3.5:
-        insight.append("\ud83d\ude0a You're on a roll! Mood's been great lately.")
-    if 'Sugary' in ','.join(recent['Foods']):
-        insight.append("\ud83c\udf6d High sugar intake might be affecting energy consistency.")
-    if 'Exercise' in ','.join(recent['Activities']):
-        insight.append("\ud83d\udcaa Days with exercise usually show higher energy.")
-    if not insight:
-        insight = ["\ud83d\udcca Not enough data yet to detect trends. Keep logging!"]
+    fig = plot_trend_graph(data_df)
+    insight = compute_insights(data_df)
 
     return fig, html.Ul([html.Li(i) for i in insight])
+
 
 @app.callback(
     Output('submit-timer', 'children'),
@@ -201,10 +208,11 @@ def update_timer(n_intervals, last_submit):
 
     remaining = 1200 - (time.time() - last_submit)
     if remaining <= 0:
-        return "\u2705 You can submit now."
+        return "✅ You can submit now."
     else:
         minutes, seconds = divmod(int(remaining), 60)
-        return f"\u23f3 Next submission allowed in {minutes:02}:{seconds:02} min"
+        return f"⏳ Next submission allowed in {minutes:02}:{seconds:02} min"
+
 
 @app.callback(
     Output('food-input', 'value'),
@@ -222,6 +230,7 @@ def demo_fill(n_clicks):
         np.random.randint(2, 5)
     )
 
+
 @app.callback(
     Output("download-dataframe-csv", "data"),
     Input("export-btn", "n_clicks"),
@@ -233,6 +242,7 @@ def export_data(n_clicks, data_records):
     temp_file = "temp_export.csv"
     df.to_csv(temp_file, index=False)
     return dcc.send_file(temp_file)
+
 
 if __name__ == '__main__':
     app.run_server(debug=True)
