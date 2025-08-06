@@ -1,5 +1,5 @@
 import dash
-from dash import dcc, html, Input, Output, State
+from dash import dcc, html, Input, Output, State, ctx
 import pandas as pd
 import datetime
 import plotly.express as px
@@ -13,7 +13,7 @@ DATA_FILE = "data.csv"
 food_tags = ['Healthy', 'Sugary', 'Junk', 'Protein', 'Carbs']
 activities = ['Exercise', 'Socializing', 'Gaming', 'Studying', 'Outdoors', 'None']
 
-# Load data function
+# Load initial data
 def load_data():
     if os.path.exists(DATA_FILE):
         df = pd.read_csv(DATA_FILE)
@@ -47,37 +47,11 @@ app.layout = html.Div([
     html.Div(id='insight-output', style={"padding": "10px", "border": "1px solid #ccc", "borderRadius": "10px"})
 ])
 
-# Handle Simulate Entry (Demo)
-@app.callback(
-    Output('memory-data', 'data'),
-    Input('simulate-btn', 'n_clicks'),
-    State('memory-data', 'data'),
-    prevent_initial_call=True
-)
-def simulate_entry(n_clicks, data_records):
-    data = pd.DataFrame(data_records)
-    today = datetime.date.today()
-
-    demo_foods = list(np.random.choice(food_tags, size=np.random.randint(1, 3), replace=False))
-    demo_acts = list(np.random.choice(activities, size=np.random.randint(1, 3), replace=False))
-    demo_mood = np.random.randint(2, 6)
-    demo_energy = np.random.randint(2, 6)
-
-    new_row = {
-        "Date": today,
-        "Foods": ', '.join(demo_foods),
-        "Activities": ', '.join(demo_acts),
-        "Mood": demo_mood,
-        "Energy": demo_energy
-    }
-    data = pd.concat([data, pd.DataFrame([new_row])], ignore_index=True)
-    data.to_csv(DATA_FILE, index=False)
-    return data.to_dict('records')
-
-# Handle Real Submission
+# Unified callback to handle Submit and Simulate Entry
 @app.callback(
     Output('memory-data', 'data'),
     Input('submit-btn', 'n_clicks'),
+    Input('simulate-btn', 'n_clicks'),
     State('food-input', 'value'),
     State('activity-input', 'value'),
     State('mood-input', 'value'),
@@ -85,17 +59,34 @@ def simulate_entry(n_clicks, data_records):
     State('memory-data', 'data'),
     prevent_initial_call=True
 )
-def submit_entry(n_clicks, foods, acts, mood, energy, data_records):
+def handle_entry(submit_clicks, simulate_clicks, foods, acts, mood, energy, data_records):
+    triggered_id = ctx.triggered_id
     data = pd.DataFrame(data_records)
     today = datetime.date.today()
 
-    new_row = {
-        "Date": today,
-        "Foods": ', '.join(foods) if foods else '',
-        "Activities": ', '.join(acts) if acts else '',
-        "Mood": mood,
-        "Energy": energy
-    }
+    if triggered_id == 'simulate-btn':
+        demo_foods = list(np.random.choice(food_tags, size=np.random.randint(1, 3), replace=False))
+        demo_acts = list(np.random.choice(activities, size=np.random.randint(1, 3), replace=False))
+        demo_mood = np.random.randint(2, 6)
+        demo_energy = np.random.randint(2, 6)
+        new_row = {
+            "Date": today,
+            "Foods": ', '.join(demo_foods),
+            "Activities": ', '.join(demo_acts),
+            "Mood": demo_mood,
+            "Energy": demo_energy
+        }
+    elif triggered_id == 'submit-btn':
+        new_row = {
+            "Date": today,
+            "Foods": ', '.join(foods) if foods else '',
+            "Activities": ', '.join(acts) if acts else '',
+            "Mood": mood,
+            "Energy": energy
+        }
+    else:
+        raise dash.exceptions.PreventUpdate
+
     data = pd.concat([data, pd.DataFrame([new_row])], ignore_index=True)
     data.to_csv(DATA_FILE, index=False)
     return data.to_dict('records')
@@ -125,7 +116,6 @@ def update_graph_and_insights(data_records):
             insight.append("💪 Days with exercise usually show higher energy.")
         if not insight:
             insight = ["📊 Not enough data yet to detect trends. Keep logging!"]
-
     else:
         fig = px.line(title="No data available")
         insight = ["📊 No data to display yet."]
