@@ -3,7 +3,6 @@ from dash import dcc, html, Input, Output, State
 import pandas as pd
 import datetime
 import plotly.express as px
-import numpy as np
 import os
 
 app = dash.Dash(__name__)
@@ -13,12 +12,13 @@ DATA_FILE = "data.csv"
 food_tags = ['Healthy', 'Sugary', 'Junk', 'Protein', 'Carbs']
 activities = ['Exercise', 'Socializing', 'Gaming', 'Studying', 'Outdoors', 'None']
 
-# Load data or create new DataFrame
-if os.path.exists(DATA_FILE):
-    data = pd.read_csv(DATA_FILE)
-    data['Date'] = pd.to_datetime(data['Date']).dt.date
-else:
-    data = pd.DataFrame(columns=['Date', 'Foods', 'Activities', 'Mood', 'Energy'])
+def load_data():
+    if os.path.exists(DATA_FILE):
+        df = pd.read_csv(DATA_FILE)
+        df['Date'] = pd.to_datetime(df['Date']).dt.date
+        return df
+    else:
+        return pd.DataFrame(columns=['Date', 'Foods', 'Activities', 'Mood', 'Energy'])
 
 app.layout = html.Div([
     html.H1("🌱 MindFuel: Mood & Health Predictor", style={'textAlign': 'center'}),
@@ -32,9 +32,7 @@ app.layout = html.Div([
         dcc.Slider(1, 5, 1, value=3, id='mood-input'),
         html.Label("Energy (1-5):"),
         dcc.Slider(1, 5, 1, value=3, id='energy-input'),
-        html.Button("Submit", id='submit-btn', n_clicks=0),
-        html.Button("Export CSV", id='export-btn', n_clicks=0),
-        dcc.Download(id="download-dataframe-csv")
+        html.Button("Simulate Entry", id='simulate-btn', n_clicks=0),
     ], style={'width': '80%', 'margin': 'auto'}),
 
     html.H3("📈 Mood & Energy Trends"),
@@ -47,51 +45,51 @@ app.layout = html.Div([
 @app.callback(
     Output('trend-graph', 'figure'),
     Output('insight-output', 'children'),
-    Input('submit-btn', 'n_clicks'),
+    Input('simulate-btn', 'n_clicks'),
     State('food-input', 'value'),
     State('activity-input', 'value'),
     State('mood-input', 'value'),
     State('energy-input', 'value')
 )
 def update(n, foods, acts, mood, energy):
-    global data
-    today = datetime.date.today()
+    data = load_data()
 
+    # Simulate entry (in-memory only)
     if n > 0:
-        if today not in data['Date'].values:
-            new_row = {
-                "Date": today,
-                "Foods": ', '.join(foods) if foods else '',
-                "Activities": ', '.join(acts) if acts else '',
-                "Mood": mood,
-                "Energy": energy
-            }
-            data.loc[len(data)] = new_row
-            data.to_csv(DATA_FILE, index=False)
+        today = datetime.date.today()
+        new_row = {
+            "Date": today,
+            "Foods": ', '.join(foods) if foods else '',
+            "Activities": ', '.join(acts) if acts else '',
+            "Mood": mood,
+            "Energy": energy
+        }
+        data = data.append(new_row, ignore_index=True)
 
-    fig = px.line(data, x='Date', y=['Mood', 'Energy'], title='Mood & Energy Over Time')
+    # Mood & Energy Trends
+    if data.empty:
+        fig = px.line(title="No data available")
+    else:
+        fig = px.line(data, x='Date', y=['Mood', 'Energy'], title='Mood & Energy Over Time')
 
+    # Insights
     insight = []
     if not data.empty:
         recent = data.tail(5)
+        all_foods = ','.join(recent['Foods'].dropna())
+        all_acts = ','.join(recent['Activities'].dropna())
+
         if recent['Mood'].mean() > 3.5:
             insight.append("😊 You're on a roll! Mood's been great lately.")
-        if 'Sugary' in ','.join(recent['Foods']):
+        if 'Sugary' in all_foods:
             insight.append("🍭 High sugar intake might be affecting energy consistency.")
-        if 'Exercise' in ','.join(recent['Activities']):
+        if 'Exercise' in all_acts:
             insight.append("💪 Days with exercise usually show higher energy.")
+
     if not insight:
         insight = ["📊 Not enough data yet to detect trends. Keep logging!"]
 
     return fig, html.Ul([html.Li(i) for i in insight])
-
-@app.callback(
-    Output("download-dataframe-csv", "data"),
-    Input("export-btn", "n_clicks"),
-    prevent_initial_call=True,
-)
-def export_data(n_clicks):
-    return dcc.send_file(DATA_FILE)
 
 if __name__ == '__main__':
     app.run_server(debug=True)
