@@ -1,5 +1,5 @@
 import dash
-from dash import dcc, html, Input, Output, State, ctx
+from dash import dcc, html, Input, Output, State
 import pandas as pd
 import datetime
 import plotly.express as px
@@ -13,7 +13,7 @@ DATA_FILE = "data.csv"
 food_tags = ['Healthy', 'Sugary', 'Junk', 'Protein', 'Carbs']
 activities = ['Exercise', 'Socializing', 'Gaming', 'Studying', 'Outdoors', 'None']
 
-# Load initial data
+# Load data function
 def load_data():
     if os.path.exists(DATA_FILE):
         df = pd.read_csv(DATA_FILE)
@@ -21,28 +21,6 @@ def load_data():
         return df
     else:
         return pd.DataFrame(columns=['Date', 'Foods', 'Activities', 'Mood', 'Energy'])
-
-# Generate Demo Data
-def generate_demo_data(days=30):
-    demo_data = []
-    start_date = datetime.date.today() - datetime.timedelta(days=days-1)
-
-    for i in range(days):
-        date = start_date + datetime.timedelta(days=i)
-        foods = list(np.random.choice(food_tags, size=np.random.randint(1, 3), replace=False))
-        acts = list(np.random.choice(activities, size=np.random.randint(1, 3), replace=False))
-        mood = np.random.randint(2, 6)
-        energy = np.random.randint(2, 6)
-
-        demo_data.append({
-            "Date": date,
-            "Foods": ', '.join(foods),
-            "Activities": ', '.join(acts),
-            "Mood": mood,
-            "Energy": energy
-        })
-
-    return pd.DataFrame(demo_data)
 
 # Layout
 app.layout = html.Div([
@@ -60,7 +38,7 @@ app.layout = html.Div([
         dcc.Slider(1, 5, 1, value=3, id='energy-input'),
         html.Button("Submit Entry", id='submit-btn', n_clicks=0),
         html.Button("Simulate Entry", id='simulate-btn', n_clicks=0, style={'marginLeft': '10px'}),
-        html.Button("Reset to Demo Data", id='reset-btn', n_clicks=0, style={'marginLeft': '10px'}),
+        html.Button("Reset to Demo", id='reset-btn', n_clicks=0, style={'marginLeft': '10px'}),
     ], style={'width': '80%', 'margin': 'auto'}),
 
     html.H3("📈 Mood & Energy Trends"),
@@ -70,12 +48,37 @@ app.layout = html.Div([
     html.Div(id='insight-output', style={"padding": "10px", "border": "1px solid #ccc", "borderRadius": "10px"})
 ])
 
-# Unified callback for Submit and Simulate Entry
+# Simulate Entry (Demo)
+@app.callback(
+    Output('memory-data', 'data'),
+    Input('simulate-btn', 'n_clicks'),
+    State('memory-data', 'data'),
+    prevent_initial_call=True
+)
+def simulate_entry(n_clicks, data_records):
+    data = pd.DataFrame(data_records)
+    today = datetime.date.today()
+
+    demo_foods = list(np.random.choice(food_tags, size=np.random.randint(1, 3), replace=False))
+    demo_acts = list(np.random.choice(activities, size=np.random.randint(1, 3), replace=False))
+    demo_mood = np.random.randint(2, 6)
+    demo_energy = np.random.randint(2, 6)
+
+    new_row = {
+        "Date": today,
+        "Foods": ', '.join(demo_foods),
+        "Activities": ', '.join(demo_acts),
+        "Mood": demo_mood,
+        "Energy": demo_energy
+    }
+    data = pd.concat([data, pd.DataFrame([new_row])], ignore_index=True)
+    data.to_csv(DATA_FILE, index=False)
+    return data.to_dict('records')
+
+# Submit Entry
 @app.callback(
     Output('memory-data', 'data'),
     Input('submit-btn', 'n_clicks'),
-    Input('simulate-btn', 'n_clicks'),
-    Input('reset-btn', 'n_clicks'),
     State('food-input', 'value'),
     State('activity-input', 'value'),
     State('mood-input', 'value'),
@@ -83,43 +86,46 @@ app.layout = html.Div([
     State('memory-data', 'data'),
     prevent_initial_call=True
 )
-def handle_entries(submit_clicks, simulate_clicks, reset_clicks, foods, acts, mood, energy, data_records):
-    triggered_id = ctx.triggered_id
-
-    if triggered_id == 'reset-btn':
-        demo_data = generate_demo_data(days=30)
-        demo_data.to_csv(DATA_FILE, index=False)
-        return demo_data.to_dict('records')
-
+def submit_entry(n_clicks, foods, acts, mood, energy, data_records):
     data = pd.DataFrame(data_records)
     today = datetime.date.today()
 
-    if triggered_id == 'simulate-btn':
-        demo_foods = list(np.random.choice(food_tags, size=np.random.randint(1, 3), replace=False))
-        demo_acts = list(np.random.choice(activities, size=np.random.randint(1, 3), replace=False))
-        demo_mood = np.random.randint(2, 6)
-        demo_energy = np.random.randint(2, 6)
-        new_row = {
-            "Date": today,
-            "Foods": ', '.join(demo_foods),
-            "Activities": ', '.join(demo_acts),
-            "Mood": demo_mood,
-            "Energy": demo_energy
-        }
-    elif triggered_id == 'submit-btn':
-        new_row = {
-            "Date": today,
-            "Foods": ', '.join(foods) if foods else '',
-            "Activities": ', '.join(acts) if acts else '',
-            "Mood": mood,
-            "Energy": energy
-        }
-    else:
-        raise dash.exceptions.PreventUpdate
-
+    new_row = {
+        "Date": today,
+        "Foods": ', '.join(foods) if foods else '',
+        "Activities": ', '.join(acts) if acts else '',
+        "Mood": mood,
+        "Energy": energy
+    }
     data = pd.concat([data, pd.DataFrame([new_row])], ignore_index=True)
     data.to_csv(DATA_FILE, index=False)
     return data.to_dict('records')
+
+# Reset to Demo Data
+@app.callback(
+    Output('memory-data', 'data'),
+    Input('reset-btn', 'n_clicks'),
+    prevent_initial_call=True
+)
+def reset_to_demo(n_clicks):
+    demo_data = []
+    start_date = datetime.date.today() - datetime.timedelta(days=29)
+    for i in range(30):
+        date = start_date + datetime.timedelta(days=i)
+        foods = list(np.random.choice(food_tags, np.random.randint(1, 3), replace=False))
+        acts = list(np.random.choice(activities, np.random.randint(1, 3), replace=False))
+        mood = np.random.randint(3, 6)
+        energy = np.random.randint(3, 6)
+        demo_data.append({
+            "Date": date,
+            "Foods": ', '.join(foods),
+            "Activities": ', '.join(acts),
+            "Mood": mood,
+            "Energy": energy
+        })
+    df = pd.DataFrame(demo_data)
+    df.to_csv(DATA_FILE, index=False)
+    return df.to_dict('records')
 
 # Update Graph and Insights
 @app.callback(
@@ -146,6 +152,7 @@ def update_graph_and_insights(data_records):
             insight.append("💪 Days with exercise usually show higher energy.")
         if not insight:
             insight = ["📊 Not enough data yet to detect trends. Keep logging!"]
+
     else:
         fig = px.line(title="No data available")
         insight = ["📊 No data to display yet."]
