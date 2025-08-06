@@ -104,10 +104,8 @@ app.layout = html.Div([
 ])
 
 @app.callback(
-    Output('trend-graph', 'figure'),
-    Output('insight-output', 'children'),
-    Output('last-submit-time', 'data'),
     Output('data-store', 'data'),
+    Output('last-submit-time', 'data'),
     Input('submit-btn', 'n_clicks'),
     State('food-input', 'value'),
     State('activity-input', 'value'),
@@ -117,9 +115,8 @@ app.layout = html.Div([
     State('data-store', 'data'),
     prevent_initial_call=True
 )
-def update(n, foods, acts, mood, energy, last_submit, data_records):
+def submit_data(n, foods, acts, mood, energy, last_submit, data_records):
     now = time.time()
-
     if last_submit and (now - last_submit < 1200):
         raise PreventUpdate
 
@@ -136,22 +133,62 @@ def update(n, foods, acts, mood, energy, last_submit, data_records):
     data_df = pd.concat([data_df, pd.DataFrame([new_row])], ignore_index=True)
     data_df.to_csv(DATA_FILE, index=False)
 
+    return data_df.to_dict('records'), now
+
+@app.callback(
+    Output('data-store', 'data'),
+    Input('demo-case-selector', 'value')
+)
+def switch_demo_case(case):
+    data_df = generate_demo_data(days=30, case=case)
+    data_df.to_csv(DATA_FILE, index=False)
+    return data_df.to_dict('records')
+
+@app.callback(
+    Output('data-store', 'data'),
+    Input('reset-btn', 'n_clicks'),
+    prevent_initial_call=True
+)
+def reset_data(n_clicks):
+    data_df = BASE_DATA.copy()
+    data_df.to_csv(DATA_FILE, index=False)
+    return data_df.to_dict('records')
+
+@app.callback(
+    Output('trend-graph', 'figure'),
+    Output('insight-output', 'children'),
+    Input('data-store', 'data'),
+    Input('demo-case-selector', 'value')
+)
+def render_graph_insights(data_records, case):
+    data_df = pd.DataFrame(data_records)
+
+    color_map = {
+        'balanced': {'Mood': 'blue', 'Energy': 'green'},
+        'high-energy': {'Mood': 'purple', 'Energy': 'orange'},
+        'low-energy': {'Mood': 'grey', 'Energy': 'brown'},
+        'sugar-crash': {'Mood': 'red', 'Energy': 'yellow'}
+    }
+
+    if data_df.empty:
+        fig = px.line(title="No data available yet.")
+        return fig, html.Ul([html.Li("\ud83d\udcca No data to show. Start logging!")])
+
     fig = px.line(data_df, x='Date', y=['Mood', 'Energy'], title='Mood & Energy Over Time',
-                  color_discrete_map={'Mood': 'blue', 'Energy': 'green'})
+                  color_discrete_map=color_map.get(case, {'Mood': 'blue', 'Energy': 'green'}))
 
     insight = []
-    if not data_df.empty:
-        recent = data_df.tail(5)
-        if recent['Mood'].mean() > 3.5:
-            insight.append("\ud83d\ude0a You're on a roll! Mood's been great lately.")
-        if 'Sugary' in ','.join(recent['Foods']):
-            insight.append("\ud83c\udf6d High sugar intake might be affecting energy consistency.")
-        if 'Exercise' in ','.join(recent['Activities']):
-            insight.append("\ud83d\udcaa Days with exercise usually show higher energy.")
+    recent = data_df.tail(5)
+    if recent['Mood'].mean() > 3.5:
+        insight.append("\ud83d\ude0a You're on a roll! Mood's been great lately.")
+    if 'Sugary' in ','.join(recent['Foods']):
+        insight.append("\ud83c\udf6d High sugar intake might be affecting energy consistency.")
+    if 'Exercise' in ','.join(recent['Activities']):
+        insight.append("\ud83d\udcaa Days with exercise usually show higher energy.")
     if not insight:
         insight = ["\ud83d\udcca Not enough data yet to detect trends. Keep logging!"]
 
-    return fig, html.Ul([html.Li(i) for i in insight]), now, data_df.to_dict('records')
+    return fig, html.Ul([html.Li(i) for i in insight])
 
 @app.callback(
     Output('submit-timer', 'children'),
@@ -184,68 +221,6 @@ def demo_fill(n_clicks):
         np.random.randint(2, 5),
         np.random.randint(2, 5)
     )
-
-@app.callback(
-    Output('trend-graph', 'figure'),
-    Output('insight-output', 'children'),
-    Output('data-store', 'data'),
-    Input('demo-case-selector', 'value')
-)
-def switch_demo_case(case):
-    data_df = generate_demo_data(days=30, case=case)
-    data_df.to_csv(DATA_FILE, index=False)
-
-    color_map = {
-        'balanced': {'Mood': 'blue', 'Energy': 'green'},
-        'high-energy': {'Mood': 'purple', 'Energy': 'orange'},
-        'low-energy': {'Mood': 'grey', 'Energy': 'brown'},
-        'sugar-crash': {'Mood': 'red', 'Energy': 'yellow'}
-    }
-
-    fig = px.line(data_df, x='Date', y=['Mood', 'Energy'], title='Mood & Energy Over Time',
-                  color_discrete_map=color_map.get(case, {'Mood': 'blue', 'Energy': 'green'}))
-
-    insight = []
-    if not data_df.empty:
-        recent = data_df.tail(5)
-        if recent['Mood'].mean() > 3.5:
-            insight.append("\ud83d\ude0a You're on a roll! Mood's been great lately.")
-        if 'Sugary' in ','.join(recent['Foods']):
-            insight.append("\ud83c\udf6d High sugar intake might be affecting energy consistency.")
-        if 'Exercise' in ','.join(recent['Activities']):
-            insight.append("\ud83d\udcaa Days with exercise usually show higher energy.")
-    if not insight:
-        insight = ["\ud83d\udcca Not enough data yet to detect trends. Keep logging!"]
-
-    return fig, html.Ul([html.Li(i) for i in insight]), data_df.to_dict('records')
-
-@app.callback(
-    Output('data-store', 'data'),
-    Output('trend-graph', 'figure'),
-    Output('insight-output', 'children'),
-    Input('reset-btn', 'n_clicks'),
-    prevent_initial_call=True
-)
-def reset_data(n_clicks):
-    data_df = BASE_DATA.copy()
-    data_df.to_csv(DATA_FILE, index=False)
-
-    fig = px.line(data_df, x='Date', y=['Mood', 'Energy'], title='Mood & Energy Over Time',
-                  color_discrete_map={'Mood': 'blue', 'Energy': 'green'})
-
-    insight = []
-    if not data_df.empty:
-        recent = data_df.tail(5)
-        if recent['Mood'].mean() > 3.5:
-            insight.append("\ud83d\ude0a You're on a roll! Mood's been great lately.")
-        if 'Sugary' in ','.join(recent['Foods']):
-            insight.append("\ud83c\udf6d High sugar intake might be affecting energy consistency.")
-        if 'Exercise' in ','.join(recent['Activities']):
-            insight.append("\ud83d\udcaa Days with exercise usually show higher energy.")
-    if not insight:
-        insight = ["\ud83d\udcca Not enough data yet to detect trends. Keep logging!"]
-
-    return data_df.to_dict('records'), fig, html.Ul([html.Li(i) for i in insight])
 
 @app.callback(
     Output("download-dataframe-csv", "data"),
