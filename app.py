@@ -15,7 +15,7 @@ DATA_FILE = "data.csv"
 food_tags = ['Healthy', 'Sugary', 'Junk', 'Protein', 'Carbs']
 activities = ['Exercise', 'Socializing', 'Gaming', 'Studying', 'Outdoors', 'None']
 
-# Initialize empty dataframe or load data.csv
+# Initialize empty dataframe
 if os.path.exists(DATA_FILE):
     data = pd.read_csv(DATA_FILE)
     data['Date'] = pd.to_datetime(data['Date']).dt.date
@@ -43,7 +43,7 @@ def generate_demo_data(days=30, case='balanced'):
         elif case == 'sugar-crash':
             mood = 5 if 'Sugary' in foods else np.random.randint(2, 5)
             energy = 2 if 'Sugary' in foods else np.random.randint(3, 6)
-        else:  # balanced
+        else:
             mood = np.random.randint(3, 6)
             energy = np.random.randint(3, 6)
 
@@ -146,11 +146,15 @@ app.layout = html.Div([
     prevent_initial_call=True
 )
 def submit_data(n, foods, acts, mood, energy, last_submit, data_records):
+    print(f"Submit clicked: foods={foods}, acts={acts}, mood={mood}, energy={energy}")
+
     now = time.time()
     if last_submit and (now - last_submit < 1200):  # 20 min cooldown
+        print("Submit blocked by cooldown")
         raise PreventUpdate
 
     if not foods or not acts or mood is None or energy is None:
+        print("Submit blocked by empty inputs")
         raise PreventUpdate
 
     data_df = pd.DataFrame(data_records)
@@ -170,8 +174,24 @@ def submit_data(n, foods, acts, mood, energy, last_submit, data_records):
     except Exception as e:
         print(f"Warning: Could not write to file: {e}")
 
-    # Clear inputs after submit
     return data_df.to_dict('records'), now, None, None, 3, 3
+
+
+@app.callback(
+    Output('food-input', 'value'),
+    Output('activity-input', 'value'),
+    Output('mood-input', 'value'),
+    Output('energy-input', 'value'),
+    Input('demo-btn', 'n_clicks'),
+    prevent_initial_call=True
+)
+def demo_fill(n_clicks):
+    foods = list(np.random.choice(food_tags, size=np.random.randint(1, 3), replace=False))
+    acts = list(np.random.choice(activities, size=np.random.randint(1, 3), replace=False))
+    mood = np.random.randint(2, 5)
+    energy = np.random.randint(2, 5)
+    print(f"Demo fill: foods={foods}, acts={acts}, mood={mood}, energy={energy}")
+    return foods, acts, mood, energy
 
 
 @app.callback(
@@ -181,10 +201,7 @@ def submit_data(n, foods, acts, mood, energy, last_submit, data_records):
 )
 def switch_demo_case(case):
     data_df = generate_demo_data(days=30, case=case)
-    try:
-        data_df.to_csv(DATA_FILE, index=False)
-    except Exception as e:
-        print(f"Warning: Could not write to file: {e}")
+    data_df.to_csv(DATA_FILE, index=False)
     return data_df.to_dict('records')
 
 
@@ -195,10 +212,7 @@ def switch_demo_case(case):
 )
 def reset_data(n_clicks):
     data_df = BASE_DATA.copy()
-    try:
-        data_df.to_csv(DATA_FILE, index=False)
-    except Exception as e:
-        print(f"Warning: Could not write to file: {e}")
+    data_df.to_csv(DATA_FILE, index=False)
     return data_df.to_dict('records')
 
 
@@ -238,23 +252,6 @@ def update_timer(n_intervals, last_submit):
 
 
 @app.callback(
-    Output('food-input', 'value'),
-    Output('activity-input', 'value'),
-    Output('mood-input', 'value'),
-    Output('energy-input', 'value'),
-    Input('demo-btn', 'n_clicks'),
-    prevent_initial_call=True
-)
-def demo_fill(n_clicks):
-    return (
-        list(np.random.choice(food_tags, size=np.random.randint(1, 3), replace=False)),
-        list(np.random.choice(activities, size=np.random.randint(1, 3), replace=False)),
-        np.random.randint(2, 5),
-        np.random.randint(2, 5)
-    )
-
-
-@app.callback(
     Output("download-dataframe-csv", "data"),
     Input("export-btn", "n_clicks"),
     State('data-store', 'data'),
@@ -262,8 +259,9 @@ def demo_fill(n_clicks):
 )
 def export_data(n_clicks, data_records):
     df = pd.DataFrame(data_records)
-    csv_string = df.to_csv(index=False)
-    return dict(content=csv_string, filename="mindfuel_export.csv")
+    temp_file = "temp_export.csv"
+    df.to_csv(temp_file, index=False)
+    return dcc.send_file(temp_file)
 
 
 if __name__ == '__main__':
