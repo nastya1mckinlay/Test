@@ -4,7 +4,6 @@ import pandas as pd
 import datetime
 import plotly.express as px
 import os
-import json
 
 app = dash.Dash(__name__)
 server = app.server
@@ -13,6 +12,7 @@ DATA_FILE = "data.csv"
 food_tags = ['Healthy', 'Sugary', 'Junk', 'Protein', 'Carbs']
 activities = ['Exercise', 'Socializing', 'Gaming', 'Studying', 'Outdoors', 'None']
 
+# Load data function
 def load_data():
     if os.path.exists(DATA_FILE):
         df = pd.read_csv(DATA_FILE)
@@ -21,8 +21,9 @@ def load_data():
     else:
         return pd.DataFrame(columns=['Date', 'Foods', 'Activities', 'Mood', 'Energy'])
 
+# Layout
 app.layout = html.Div([
-    dcc.Store(id='memory-data', data=load_data().to_dict('records')),  # Store CSV data in memory
+    dcc.Store(id='memory-data', data=load_data().to_dict('records')),
     html.H1("🌱 MindFuel: Mood & Health Predictor", style={'textAlign': 'center'}),
     html.Div([
         html.H3("📋 Log Your Day"),
@@ -40,10 +41,11 @@ app.layout = html.Div([
     html.H3("📈 Mood & Energy Trends"),
     dcc.Graph(id='trend-graph'),
 
-    html.H3("🧠 Predictive Insight"),
+    html.H3("🧐 Predictive Insight"),
     html.Div(id='insight-output', style={"padding": "10px", "border": "1px solid #ccc", "borderRadius": "10px"})
 ])
 
+# Callback to simulate entry and update in-memory data
 @app.callback(
     Output('memory-data', 'data'),
     Input('simulate-btn', 'n_clicks'),
@@ -64,11 +66,13 @@ def simulate_entry(n_clicks, foods, acts, mood, energy, data_records):
             "Mood": mood,
             "Energy": energy
         }
-        data = data.append(new_row, ignore_index=True)
+        new_entry_df = pd.DataFrame([new_row])
+        data = pd.concat([data, new_entry_df], ignore_index=True)
         return data.to_dict('records')
     else:
         return data_records
 
+# Callback to update graph and insights
 @app.callback(
     Output('trend-graph', 'figure'),
     Output('insight-output', 'children'),
