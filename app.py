@@ -1,10 +1,3 @@
-"""
-© 2025 Your Name. All rights reserved.
-MindFuel – Mood & Energy Predictor App.
-
-Created by Anastasia McKinlay.
-"""
-
 import dash
 from dash import dcc, html, Input, Output, State
 import pandas as pd
@@ -28,6 +21,8 @@ if os.path.exists(DATA_FILE):
     data['Date'] = pd.to_datetime(data['Date']).dt.date
 else:
     data = pd.DataFrame(columns=['Date', 'Foods', 'Activities', 'Mood', 'Energy'])
+
+BASE_DATA = data.copy()
 
 def generate_demo_data(days=30, case='balanced'):
     demo_data = []
@@ -82,6 +77,7 @@ app.layout = html.Div([
         html.Button("Submit", id='submit-btn', n_clicks=0),
         html.Button("Demo Entry", id='demo-btn', n_clicks=0, style={'marginLeft': '10px'}),
         html.Button("Export CSV", id='export-btn', n_clicks=0, style={'marginLeft': '10px'}),
+        html.Button("Reset to Original Data", id='reset-btn', n_clicks=0, style={'marginLeft': '10px'}),
         dcc.Download(id="download-dataframe-csv"),
 
         html.Div(id='submit-timer', style={'color': 'red', 'marginTop': '10px'}),
@@ -140,7 +136,8 @@ def update(n, foods, acts, mood, energy, last_submit, data_records):
     data_df = pd.concat([data_df, pd.DataFrame([new_row])], ignore_index=True)
     data_df.to_csv(DATA_FILE, index=False)
 
-    fig = px.line(data_df, x='Date', y=['Mood', 'Energy'], title='Mood & Energy Over Time')
+    fig = px.line(data_df, x='Date', y=['Mood', 'Energy'], title='Mood & Energy Over Time',
+                  color_discrete_map={'Mood': 'blue', 'Energy': 'green'})
 
     insight = []
     if not data_df.empty:
@@ -198,7 +195,15 @@ def switch_demo_case(case):
     data_df = generate_demo_data(days=30, case=case)
     data_df.to_csv(DATA_FILE, index=False)
 
-    fig = px.line(data_df, x='Date', y=['Mood', 'Energy'], title='Mood & Energy Over Time')
+    color_map = {
+        'balanced': {'Mood': 'blue', 'Energy': 'green'},
+        'high-energy': {'Mood': 'purple', 'Energy': 'orange'},
+        'low-energy': {'Mood': 'grey', 'Energy': 'brown'},
+        'sugar-crash': {'Mood': 'red', 'Energy': 'yellow'}
+    }
+
+    fig = px.line(data_df, x='Date', y=['Mood', 'Energy'], title='Mood & Energy Over Time',
+                  color_discrete_map=color_map.get(case, {'Mood': 'blue', 'Energy': 'green'}))
 
     insight = []
     if not data_df.empty:
@@ -213,6 +218,34 @@ def switch_demo_case(case):
         insight = ["\ud83d\udcca Not enough data yet to detect trends. Keep logging!"]
 
     return fig, html.Ul([html.Li(i) for i in insight]), data_df.to_dict('records')
+
+@app.callback(
+    Output('data-store', 'data'),
+    Output('trend-graph', 'figure'),
+    Output('insight-output', 'children'),
+    Input('reset-btn', 'n_clicks'),
+    prevent_initial_call=True
+)
+def reset_data(n_clicks):
+    data_df = BASE_DATA.copy()
+    data_df.to_csv(DATA_FILE, index=False)
+
+    fig = px.line(data_df, x='Date', y=['Mood', 'Energy'], title='Mood & Energy Over Time',
+                  color_discrete_map={'Mood': 'blue', 'Energy': 'green'})
+
+    insight = []
+    if not data_df.empty:
+        recent = data_df.tail(5)
+        if recent['Mood'].mean() > 3.5:
+            insight.append("\ud83d\ude0a You're on a roll! Mood's been great lately.")
+        if 'Sugary' in ','.join(recent['Foods']):
+            insight.append("\ud83c\udf6d High sugar intake might be affecting energy consistency.")
+        if 'Exercise' in ','.join(recent['Activities']):
+            insight.append("\ud83d\udcaa Days with exercise usually show higher energy.")
+    if not insight:
+        insight = ["\ud83d\udcca Not enough data yet to detect trends. Keep logging!"]
+
+    return data_df.to_dict('records'), fig, html.Ul([html.Li(i) for i in insight])
 
 @app.callback(
     Output("download-dataframe-csv", "data"),
