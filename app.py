@@ -22,10 +22,12 @@ DATA_FILE = "data.csv"
 food_tags = ['Healthy', 'Sugary', 'Junk', 'Protein', 'Carbs']
 activities = ['Exercise', 'Socializing', 'Gaming', 'Studying', 'Outdoors', 'None']
 
-data = pd.DataFrame()
+# Initialize empty dataframe
 if os.path.exists(DATA_FILE):
     data = pd.read_csv(DATA_FILE)
     data['Date'] = pd.to_datetime(data['Date']).dt.date
+else:
+    data = pd.DataFrame(columns=['Date', 'Foods', 'Activities', 'Mood', 'Energy'])
 
 def generate_demo_data(days=30, case='balanced'):
     demo_data = []
@@ -63,6 +65,7 @@ app.layout = html.Div([
     html.H1("\ud83c\udf31 MindFuel: Mood & Health Predictor", style={'textAlign': 'center'}),
 
     dcc.Store(id='last-submit-time', data=None),
+    dcc.Store(id='data-store', data=data.to_dict('records')),
     dcc.Interval(id='interval-component', interval=1000, n_intervals=0),
 
     html.Div([
@@ -108,21 +111,23 @@ app.layout = html.Div([
     Output('trend-graph', 'figure'),
     Output('insight-output', 'children'),
     Output('last-submit-time', 'data'),
+    Output('data-store', 'data'),
     Input('submit-btn', 'n_clicks'),
     State('food-input', 'value'),
     State('activity-input', 'value'),
     State('mood-input', 'value'),
     State('energy-input', 'value'),
     State('last-submit-time', 'data'),
+    State('data-store', 'data'),
     prevent_initial_call=True
 )
-def update(n, foods, acts, mood, energy, last_submit):
-    global data
+def update(n, foods, acts, mood, energy, last_submit, data_records):
     now = time.time()
 
     if last_submit and (now - last_submit < 1200):
         raise PreventUpdate
 
+    data_df = pd.DataFrame(data_records)
     today = datetime.date.today()
 
     new_row = {
@@ -132,14 +137,14 @@ def update(n, foods, acts, mood, energy, last_submit):
         "Mood": mood,
         "Energy": energy
     }
-    data.loc[len(data)] = new_row
-    data.to_csv(DATA_FILE, index=False)
+    data_df = pd.concat([data_df, pd.DataFrame([new_row])], ignore_index=True)
+    data_df.to_csv(DATA_FILE, index=False)
 
-    fig = px.line(data, x='Date', y=['Mood', 'Energy'], title='Mood & Energy Over Time')
+    fig = px.line(data_df, x='Date', y=['Mood', 'Energy'], title='Mood & Energy Over Time')
 
     insight = []
-    if not data.empty:
-        recent = data.tail(5)
+    if not data_df.empty:
+        recent = data_df.tail(5)
         if recent['Mood'].mean() > 3.5:
             insight.append("\ud83d\ude0a You're on a roll! Mood's been great lately.")
         if 'Sugary' in ','.join(recent['Foods']):
@@ -149,7 +154,7 @@ def update(n, foods, acts, mood, energy, last_submit):
     if not insight:
         insight = ["\ud83d\udcca Not enough data yet to detect trends. Keep logging!"]
 
-    return fig, html.Ul([html.Li(i) for i in insight]), now
+    return fig, html.Ul([html.Li(i) for i in insight]), now, data_df.to_dict('records')
 
 @app.callback(
     Output('submit-timer', 'children'),
@@ -186,18 +191,18 @@ def demo_fill(n_clicks):
 @app.callback(
     Output('trend-graph', 'figure'),
     Output('insight-output', 'children'),
+    Output('data-store', 'data'),
     Input('demo-case-selector', 'value')
 )
 def switch_demo_case(case):
-    global data
-    data = generate_demo_data(days=30, case=case)
-    data.to_csv(DATA_FILE, index=False)
+    data_df = generate_demo_data(days=30, case=case)
+    data_df.to_csv(DATA_FILE, index=False)
 
-    fig = px.line(data, x='Date', y=['Mood', 'Energy'], title='Mood & Energy Over Time')
+    fig = px.line(data_df, x='Date', y=['Mood', 'Energy'], title='Mood & Energy Over Time')
 
     insight = []
-    if not data.empty:
-        recent = data.tail(5)
+    if not data_df.empty:
+        recent = data_df.tail(5)
         if recent['Mood'].mean() > 3.5:
             insight.append("\ud83d\ude0a You're on a roll! Mood's been great lately.")
         if 'Sugary' in ','.join(recent['Foods']):
@@ -207,16 +212,19 @@ def switch_demo_case(case):
     if not insight:
         insight = ["\ud83d\udcca Not enough data yet to detect trends. Keep logging!"]
 
-    return fig, html.Ul([html.Li(i) for i in insight])
+    return fig, html.Ul([html.Li(i) for i in insight]), data_df.to_dict('records')
 
 @app.callback(
     Output("download-dataframe-csv", "data"),
     Input("export-btn", "n_clicks"),
+    State('data-store', 'data'),
     prevent_initial_call=True
 )
-def export_data(n_clicks):
-    return dcc.send_file(DATA_FILE)
+def export_data(n_clicks, data_records):
+    df = pd.DataFrame(data_records)
+    temp_file = "temp_export.csv"
+    df.to_csv(temp_file, index=False)
+    return dcc.send_file(temp_file)
 
 if __name__ == '__main__':
     app.run_server(debug=True)
-
