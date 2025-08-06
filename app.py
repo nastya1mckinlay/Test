@@ -13,7 +13,7 @@ DATA_FILE = "data.csv"
 food_tags = ['Healthy', 'Sugary', 'Junk', 'Protein', 'Carbs']
 activities = ['Exercise', 'Socializing', 'Gaming', 'Studying', 'Outdoors', 'None']
 
-# Load data function
+# Load data from CSV if exists
 def load_data():
     if os.path.exists(DATA_FILE):
         df = pd.read_csv(DATA_FILE)
@@ -22,10 +22,33 @@ def load_data():
     else:
         return pd.DataFrame(columns=['Date', 'Foods', 'Activities', 'Mood', 'Energy'])
 
+# Generate demo data
+def generate_demo_data():
+    demo_data = []
+    start_date = datetime.datetime.now() - datetime.timedelta(days=29)
+
+    for i in range(30):
+        date = (start_date + datetime.timedelta(days=i)).date()
+        foods = list(np.random.choice(food_tags, size=np.random.randint(1, 3), replace=False))
+        acts = list(np.random.choice(activities, size=np.random.randint(1, 3), replace=False))
+        mood = np.random.randint(2, 6)
+        energy = np.random.randint(2, 6)
+
+        demo_data.append({
+            "Date": date,
+            "Foods": ', '.join(foods),
+            "Activities": ', '.join(acts),
+            "Mood": mood,
+            "Energy": energy
+        })
+
+    return pd.DataFrame(demo_data)
+
 # Layout
 app.layout = html.Div([
     dcc.Store(id='memory-data', data=load_data().to_dict('records')),
     html.H1("🌱 MindFuel: Mood & Health Predictor", style={'textAlign': 'center'}),
+
     html.Div([
         html.H3("📋 Log Your Day"),
         html.Label("Food Tags:"),
@@ -36,6 +59,7 @@ app.layout = html.Div([
         dcc.Slider(1, 5, 1, value=3, id='mood-input'),
         html.Label("Energy (1-5):"),
         dcc.Slider(1, 5, 1, value=3, id='energy-input'),
+
         html.Button("Submit Entry", id='submit-btn', n_clicks=0),
         html.Button("Simulate Entry", id='simulate-btn', n_clicks=0, style={'marginLeft': '10px'}),
         html.Button("Reset to Demo", id='reset-btn', n_clicks=0, style={'marginLeft': '10px'}),
@@ -48,37 +72,12 @@ app.layout = html.Div([
     html.Div(id='insight-output', style={"padding": "10px", "border": "1px solid #ccc", "borderRadius": "10px"})
 ])
 
-# Simulate Entry (Demo)
-@app.callback(
-    Output('memory-data', 'data'),
-    Input('simulate-btn', 'n_clicks'),
-    State('memory-data', 'data'),
-    prevent_initial_call=True
-)
-def simulate_entry(n_clicks, data_records):
-    data = pd.DataFrame(data_records)
-    today = datetime.date.today()
-
-    demo_foods = list(np.random.choice(food_tags, size=np.random.randint(1, 3), replace=False))
-    demo_acts = list(np.random.choice(activities, size=np.random.randint(1, 3), replace=False))
-    demo_mood = np.random.randint(2, 6)
-    demo_energy = np.random.randint(2, 6)
-
-    new_row = {
-        "Date": today,
-        "Foods": ', '.join(demo_foods),
-        "Activities": ', '.join(demo_acts),
-        "Mood": demo_mood,
-        "Energy": demo_energy
-    }
-    data = pd.concat([data, pd.DataFrame([new_row])], ignore_index=True)
-    data.to_csv(DATA_FILE, index=False)
-    return data.to_dict('records')
-
-# Submit Entry
+# Unified callback for Submit, Simulate, and Reset
 @app.callback(
     Output('memory-data', 'data'),
     Input('submit-btn', 'n_clicks'),
+    Input('simulate-btn', 'n_clicks'),
+    Input('reset-btn', 'n_clicks'),
     State('food-input', 'value'),
     State('activity-input', 'value'),
     State('mood-input', 'value'),
@@ -86,46 +85,45 @@ def simulate_entry(n_clicks, data_records):
     State('memory-data', 'data'),
     prevent_initial_call=True
 )
-def submit_entry(n_clicks, foods, acts, mood, energy, data_records):
+def update_data(submit_clicks, simulate_clicks, reset_clicks, foods, acts, mood, energy, data_records):
+    ctx = dash.callback_context
+
+    if not ctx.triggered:
+        raise dash.exceptions.PreventUpdate
+
+    button_id = ctx.triggered[0]['prop_id'].split('.')[0]
     data = pd.DataFrame(data_records)
-    today = datetime.date.today()
 
-    new_row = {
-        "Date": today,
-        "Foods": ', '.join(foods) if foods else '',
-        "Activities": ', '.join(acts) if acts else '',
-        "Mood": mood,
-        "Energy": energy
-    }
-    data = pd.concat([data, pd.DataFrame([new_row])], ignore_index=True)
-    data.to_csv(DATA_FILE, index=False)
-    return data.to_dict('records')
+    if button_id == 'reset-btn':
+        data = generate_demo_data()
+    elif button_id == 'simulate-btn':
+        today = datetime.date.today()
+        demo_foods = list(np.random.choice(food_tags, size=np.random.randint(1, 3), replace=False))
+        demo_acts = list(np.random.choice(activities, size=np.random.randint(1, 3), replace=False))
+        demo_mood = np.random.randint(2, 6)
+        demo_energy = np.random.randint(2, 6)
 
-# Reset to Demo Data
-@app.callback(
-    Output('memory-data', 'data'),
-    Input('reset-btn', 'n_clicks'),
-    prevent_initial_call=True
-)
-def reset_to_demo(n_clicks):
-    demo_data = []
-    start_date = datetime.date.today() - datetime.timedelta(days=29)
-    for i in range(30):
-        date = start_date + datetime.timedelta(days=i)
-        foods = list(np.random.choice(food_tags, np.random.randint(1, 3), replace=False))
-        acts = list(np.random.choice(activities, np.random.randint(1, 3), replace=False))
-        mood = np.random.randint(3, 6)
-        energy = np.random.randint(3, 6)
-        demo_data.append({
-            "Date": date,
-            "Foods": ', '.join(foods),
-            "Activities": ', '.join(acts),
+        new_row = {
+            "Date": today,
+            "Foods": ', '.join(demo_foods),
+            "Activities": ', '.join(demo_acts),
+            "Mood": demo_mood,
+            "Energy": demo_energy
+        }
+        data = pd.concat([data, pd.DataFrame([new_row])], ignore_index=True)
+    elif button_id == 'submit-btn':
+        today = datetime.date.today()
+        new_row = {
+            "Date": today,
+            "Foods": ', '.join(foods) if foods else '',
+            "Activities": ', '.join(acts) if acts else '',
             "Mood": mood,
             "Energy": energy
-        })
-    df = pd.DataFrame(demo_data)
-    df.to_csv(DATA_FILE, index=False)
-    return df.to_dict('records')
+        }
+        data = pd.concat([data, pd.DataFrame([new_row])], ignore_index=True)
+
+    data.to_csv(DATA_FILE, index=False)
+    return data.to_dict('records')
 
 # Update Graph and Insights
 @app.callback(
