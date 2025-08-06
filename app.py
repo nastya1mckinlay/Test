@@ -5,7 +5,6 @@ MindFuel – Mood & Energy Predictor App.
 Created by Anastasia McKinlay.
 """
 
-
 import dash
 from dash import dcc, html, Input, Output, State
 import pandas as pd
@@ -23,12 +22,42 @@ DATA_FILE = "data.csv"
 food_tags = ['Healthy', 'Sugary', 'Junk', 'Protein', 'Carbs']
 activities = ['Exercise', 'Socializing', 'Gaming', 'Studying', 'Outdoors', 'None']
 
-# Load data or create new DataFrame
+data = pd.DataFrame()
 if os.path.exists(DATA_FILE):
     data = pd.read_csv(DATA_FILE)
     data['Date'] = pd.to_datetime(data['Date']).dt.date
-else:
-    data = pd.DataFrame(columns=['Date', 'Foods', 'Activities', 'Mood', 'Energy'])
+
+def generate_demo_data(days=30, case='balanced'):
+    demo_data = []
+    start_date = datetime.datetime.now() - datetime.timedelta(days=days-1)
+
+    for i in range(days):
+        date = (start_date + datetime.timedelta(days=i)).date()
+        foods = list(np.random.choice(food_tags, np.random.randint(1, 3), replace=False))
+        acts = list(np.random.choice(activities, np.random.randint(1, 3), replace=False))
+
+        if case == 'high-energy':
+            mood = np.random.randint(4, 6)
+            energy = np.random.randint(4, 6)
+        elif case == 'low-energy':
+            mood = np.random.randint(2, 4)
+            energy = np.random.randint(1, 3)
+        elif case == 'sugar-crash':
+            mood = 5 if 'Sugary' in foods else np.random.randint(2, 5)
+            energy = 2 if 'Sugary' in foods else np.random.randint(3, 6)
+        else:
+            mood = np.random.randint(3, 6)
+            energy = np.random.randint(3, 6)
+
+        demo_data.append({
+            "Date": date,
+            "Foods": ', '.join(foods),
+            "Activities": ', '.join(acts),
+            "Mood": mood,
+            "Energy": energy
+        })
+
+    return pd.DataFrame(demo_data)
 
 app.layout = html.Div([
     html.H1("\ud83c\udf31 MindFuel: Mood & Health Predictor", style={'textAlign': 'center'}),
@@ -52,7 +81,20 @@ app.layout = html.Div([
         html.Button("Export CSV", id='export-btn', n_clicks=0, style={'marginLeft': '10px'}),
         dcc.Download(id="download-dataframe-csv"),
 
-        html.Div(id='submit-timer', style={'color': 'red', 'marginTop': '10px'})
+        html.Div(id='submit-timer', style={'color': 'red', 'marginTop': '10px'}),
+
+        html.Hr(),
+        html.Label("\ud83d\udd04 Switch Demo Case:"),
+        dcc.Dropdown(
+            options=[
+                {'label': 'Balanced', 'value': 'balanced'},
+                {'label': 'High Energy', 'value': 'high-energy'},
+                {'label': 'Low Energy', 'value': 'low-energy'},
+                {'label': 'Sugar Crash', 'value': 'sugar-crash'}
+            ],
+            value='balanced',
+            id='demo-case-selector'
+        )
     ], style={'width': '80%', 'margin': 'auto'}),
 
     html.H3("\ud83d\udcc8 Mood & Energy Trends"),
@@ -142,6 +184,32 @@ def demo_fill(n_clicks):
     )
 
 @app.callback(
+    Output('trend-graph', 'figure'),
+    Output('insight-output', 'children'),
+    Input('demo-case-selector', 'value')
+)
+def switch_demo_case(case):
+    global data
+    data = generate_demo_data(days=30, case=case)
+    data.to_csv(DATA_FILE, index=False)
+
+    fig = px.line(data, x='Date', y=['Mood', 'Energy'], title='Mood & Energy Over Time')
+
+    insight = []
+    if not data.empty:
+        recent = data.tail(5)
+        if recent['Mood'].mean() > 3.5:
+            insight.append("\ud83d\ude0a You're on a roll! Mood's been great lately.")
+        if 'Sugary' in ','.join(recent['Foods']):
+            insight.append("\ud83c\udf6d High sugar intake might be affecting energy consistency.")
+        if 'Exercise' in ','.join(recent['Activities']):
+            insight.append("\ud83d\udcaa Days with exercise usually show higher energy.")
+    if not insight:
+        insight = ["\ud83d\udcca Not enough data yet to detect trends. Keep logging!"]
+
+    return fig, html.Ul([html.Li(i) for i in insight])
+
+@app.callback(
     Output("download-dataframe-csv", "data"),
     Input("export-btn", "n_clicks"),
     prevent_initial_call=True
@@ -151,3 +219,4 @@ def export_data(n_clicks):
 
 if __name__ == '__main__':
     app.run_server(debug=True)
+
