@@ -13,7 +13,7 @@ DATA_FILE = "data.csv"
 food_tags = ['Healthy', 'Sugary', 'Junk', 'Protein', 'Carbs']
 activities = ['Exercise', 'Socializing', 'Gaming', 'Studying', 'Outdoors', 'None']
 
-# Load Data
+# Load data function
 def load_data():
     if os.path.exists(DATA_FILE):
         df = pd.read_csv(DATA_FILE)
@@ -25,7 +25,6 @@ def load_data():
 # Layout
 app.layout = html.Div([
     dcc.Store(id='memory-data', data=load_data().to_dict('records')),
-
     html.H1("🌱 MindFuel: Mood & Health Predictor", style={'textAlign': 'center'}),
     html.Div([
         html.H3("📋 Log Your Day"),
@@ -38,7 +37,7 @@ app.layout = html.Div([
         html.Label("Energy (1-5):"),
         dcc.Slider(1, 5, 1, value=3, id='energy-input'),
         html.Button("Submit Entry", id='submit-btn', n_clicks=0),
-        html.Button("Demo Entry", id='demo-btn', n_clicks=0, style={'marginLeft': '10px'}),
+        html.Button("Simulate Entry", id='simulate-btn', n_clicks=0, style={'marginLeft': '10px'}),
     ], style={'width': '80%', 'margin': 'auto'}),
 
     html.H3("📈 Mood & Energy Trends"),
@@ -48,7 +47,34 @@ app.layout = html.Div([
     html.Div(id='insight-output', style={"padding": "10px", "border": "1px solid #ccc", "borderRadius": "10px"})
 ])
 
-# Callback to handle real entry
+# Handle Simulate Entry (Demo)
+@app.callback(
+    Output('memory-data', 'data'),
+    Input('simulate-btn', 'n_clicks'),
+    State('memory-data', 'data'),
+    prevent_initial_call=True
+)
+def simulate_entry(n_clicks, data_records):
+    data = pd.DataFrame(data_records)
+    today = datetime.date.today()
+
+    demo_foods = list(np.random.choice(food_tags, size=np.random.randint(1, 3), replace=False))
+    demo_acts = list(np.random.choice(activities, size=np.random.randint(1, 3), replace=False))
+    demo_mood = np.random.randint(2, 6)
+    demo_energy = np.random.randint(2, 6)
+
+    new_row = {
+        "Date": today,
+        "Foods": ', '.join(demo_foods),
+        "Activities": ', '.join(demo_acts),
+        "Mood": demo_mood,
+        "Energy": demo_energy
+    }
+    data = pd.concat([data, pd.DataFrame([new_row])], ignore_index=True)
+    data.to_csv(DATA_FILE, index=False)
+    return data.to_dict('records')
+
+# Handle Real Submission
 @app.callback(
     Output('memory-data', 'data'),
     Input('submit-btn', 'n_clicks'),
@@ -62,38 +88,13 @@ app.layout = html.Div([
 def submit_entry(n_clicks, foods, acts, mood, energy, data_records):
     data = pd.DataFrame(data_records)
     today = datetime.date.today()
+
     new_row = {
         "Date": today,
         "Foods": ', '.join(foods) if foods else '',
         "Activities": ', '.join(acts) if acts else '',
         "Mood": mood,
         "Energy": energy
-    }
-    data = pd.concat([data, pd.DataFrame([new_row])], ignore_index=True)
-    data.to_csv(DATA_FILE, index=False)
-    return data.to_dict('records')
-
-# Callback to handle demo entry
-@app.callback(
-    Output('memory-data', 'data'),
-    Input('demo-btn', 'n_clicks'),
-    State('memory-data', 'data'),
-    prevent_initial_call=True
-)
-def demo_entry(n_clicks, data_records):
-    data = pd.DataFrame(data_records)
-    today = datetime.date.today()
-    demo_foods = list(np.random.choice(food_tags, size=np.random.randint(1, 3), replace=False))
-    demo_acts = list(np.random.choice(activities, size=np.random.randint(1, 3), replace=False))
-    demo_mood = np.random.randint(2, 6)
-    demo_energy = np.random.randint(2, 6)
-
-    new_row = {
-        "Date": today,
-        "Foods": ', '.join(demo_foods),
-        "Activities": ', '.join(demo_acts),
-        "Mood": demo_mood,
-        "Energy": demo_energy
     }
     data = pd.concat([data, pd.DataFrame([new_row])], ignore_index=True)
     data.to_csv(DATA_FILE, index=False)
