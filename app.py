@@ -4,6 +4,7 @@ import pandas as pd
 import datetime
 import plotly.express as px
 import os
+import json
 
 app = dash.Dash(__name__)
 server = app.server
@@ -21,6 +22,7 @@ def load_data():
         return pd.DataFrame(columns=['Date', 'Foods', 'Activities', 'Mood', 'Energy'])
 
 app.layout = html.Div([
+    dcc.Store(id='memory-data', data=load_data().to_dict('records')),  # Store CSV data in memory
     html.H1("🌱 MindFuel: Mood & Health Predictor", style={'textAlign': 'center'}),
     html.Div([
         html.H3("📋 Log Your Day"),
@@ -43,19 +45,17 @@ app.layout = html.Div([
 ])
 
 @app.callback(
-    Output('trend-graph', 'figure'),
-    Output('insight-output', 'children'),
+    Output('memory-data', 'data'),
     Input('simulate-btn', 'n_clicks'),
     State('food-input', 'value'),
     State('activity-input', 'value'),
     State('mood-input', 'value'),
-    State('energy-input', 'value')
+    State('energy-input', 'value'),
+    State('memory-data', 'data')
 )
-def update(n, foods, acts, mood, energy):
-    data = load_data()
-
-    # Simulate entry (in-memory only)
-    if n > 0:
+def simulate_entry(n_clicks, foods, acts, mood, energy, data_records):
+    if n_clicks > 0:
+        data = pd.DataFrame(data_records)
         today = datetime.date.today()
         new_row = {
             "Date": today,
@@ -65,29 +65,38 @@ def update(n, foods, acts, mood, energy):
             "Energy": energy
         }
         data = data.append(new_row, ignore_index=True)
-
-    # Mood & Energy Trends
-    if data.empty:
-        fig = px.line(title="No data available")
+        return data.to_dict('records')
     else:
+        return data_records
+
+@app.callback(
+    Output('trend-graph', 'figure'),
+    Output('insight-output', 'children'),
+    Input('memory-data', 'data')
+)
+def update_graph_and_insights(data_records):
+    data = pd.DataFrame(data_records)
+    if not data.empty:
+        data['Date'] = pd.to_datetime(data['Date']).dt.date
         fig = px.line(data, x='Date', y=['Mood', 'Energy'], title='Mood & Energy Over Time')
 
-    # Insights
-    insight = []
-    if not data.empty:
         recent = data.tail(5)
         all_foods = ','.join(recent['Foods'].dropna())
         all_acts = ','.join(recent['Activities'].dropna())
 
+        insight = []
         if recent['Mood'].mean() > 3.5:
             insight.append("😊 You're on a roll! Mood's been great lately.")
         if 'Sugary' in all_foods:
             insight.append("🍭 High sugar intake might be affecting energy consistency.")
         if 'Exercise' in all_acts:
             insight.append("💪 Days with exercise usually show higher energy.")
+        if not insight:
+            insight = ["📊 Not enough data yet to detect trends. Keep logging!"]
 
-    if not insight:
-        insight = ["📊 Not enough data yet to detect trends. Keep logging!"]
+    else:
+        fig = px.line(title="No data available")
+        insight = ["📊 No data to display yet."]
 
     return fig, html.Ul([html.Li(i) for i in insight])
 
