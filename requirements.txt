@@ -1,6 +1,6 @@
 dash
 pandas
 plotly
+scikit-learn==1.7.1
 numpy
-gunicorn
-scikit-learn
+joblib
