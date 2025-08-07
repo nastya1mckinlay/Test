@@ -5,6 +5,7 @@ import datetime
 import plotly.express as px
 import numpy as np
 import os
+import time
 
 app = dash.Dash(__name__)
 server = app.server
@@ -16,21 +17,17 @@ activities = ['Exercise', 'Socializing', 'Gaming', 'Studying', 'Outdoors', 'None
 def load_data():
     if os.path.exists(DATA_FILE):
         df = pd.read_csv(DATA_FILE)
-        # Parse Date column with full datetime (including time)
         df['Date'] = pd.to_datetime(df['Date'])
         return df
     else:
-        # Start with empty dataframe with Date as datetime64 dtype
-        return pd.DataFrame(columns=['Date', 'Foods', 'Activities', 'Mood', 'Energy']).astype({
-            'Date': 'datetime64[ns]',
-            'Foods': 'object',
-            'Activities': 'object',
-            'Mood': 'int',
-            'Energy': 'int'
-        })
+        return pd.DataFrame(columns=['Date', 'Foods', 'Activities', 'Mood', 'Energy'])
+
+# Store the timestamp of the last submit
+last_submit_time = 0
 
 app.layout = html.Div([
     dcc.Store(id='memory-data', data=load_data().to_dict('records')),
+    dcc.Store(id='last-submit', data=0),  # Store last submit timestamp in client memory
     html.H1("🌱 MindFuel: Mood & Health Predictor", style={'textAlign': 'center'}),
     html.Div([
         html.H3("📋 Log Your Day"),
@@ -44,7 +41,7 @@ app.layout = html.Div([
         dcc.Slider(1, 5, 1, value=3, id='energy-input'),
         html.Button("Submit Entry", id='submit-btn', n_clicks=0),
         html.Button("Simulate Entry", id='simulate-btn', n_clicks=0, style={'marginLeft': '10px'}),
-        html.Button("Reset to Demo", id='reset-btn', n_clicks=0, style={'marginLeft': '10px'}),
+        html.Div(id='submit-message', style={'color': 'red', 'marginTop': '10px'})
     ], style={'width': '80%', 'margin': 'auto'}),
 
     html.H3("📈 Mood & Energy Trends"),
@@ -54,20 +51,28 @@ app.layout = html.Div([
     html.Div(id='insight-output', style={"padding": "10px", "border": "1px solid #ccc", "borderRadius": "10px"})
 ])
 
-# Submit Entry callback: add entry with full datetime now
+# Submit Entry callback with 1-minute cooldown
 @app.callback(
     Output('memory-data', 'data'),
+    Output('submit-message', 'children'),
+    Output('last-submit', 'data'),
     Input('submit-btn', 'n_clicks'),
     State('food-input', 'value'),
     State('activity-input', 'value'),
     State('mood-input', 'value'),
     State('energy-input', 'value'),
     State('memory-data', 'data'),
+    State('last-submit', 'data'),
     prevent_initial_call=True
 )
-def submit_entry(n_clicks, foods, acts, mood, energy, data_records):
+def submit_entry(n_clicks, foods, acts, mood, energy, data_records, last_submit_timestamp):
+    now_ts = time.time()
+    # Check cooldown: only allow if >60 seconds since last submit
+    if now_ts - last_submit_timestamp < 60:
+        return data_records, "⏳ Please wait before submitting again (1 min cooldown).", last_submit_timestamp
+
     data = pd.DataFrame(data_records)
-    now = datetime.datetime.now()  # full datetime with time
+    now = datetime.datetime.now()
 
     new_row = {
         "Date": now,
@@ -78,9 +83,9 @@ def submit_entry(n_clicks, foods, acts, mood, energy, data_records):
     }
     data = pd.concat([data, pd.DataFrame([new_row])], ignore_index=True)
     data.to_csv(DATA_FILE, index=False)
-    return data.to_dict('records')
+    return data.to_dict('records'), "", now_ts
 
-# Simulate Entry callback: add random demo entry with full datetime now
+# Simulate Entry callback (demo)
 @app.callback(
     Output('memory-data', 'data'),
     Input('simulate-btn', 'n_clicks'),
@@ -107,30 +112,7 @@ def simulate_entry(n_clicks, data_records):
     data.to_csv(DATA_FILE, index=False)
     return data.to_dict('records')
 
-# Reset to demo data callback (optional)
-@app.callback(
-    Output('memory-data', 'data'),
-    Input('reset-btn', 'n_clicks'),
-    prevent_initial_call=True
-)
-def reset_to_demo(n_clicks):
-    # Generate demo data with timestamps
-    now = datetime.datetime.now()
-    demo_rows = []
-    for i in range(10):
-        dt = now - datetime.timedelta(hours=10 - i)  # spaced hourly
-        demo_rows.append({
-            "Date": dt,
-            "Foods": np.random.choice(food_tags, 1)[0],
-            "Activities": np.random.choice(activities, 1)[0],
-            "Mood": np.random.randint(2, 6),
-            "Energy": np.random.randint(2, 6)
-        })
-    demo_df = pd.DataFrame(demo_rows)
-    demo_df.to_csv(DATA_FILE, index=False)
-    return demo_df.to_dict('records')
-
-# Update graph and insights with full datetime on x-axis
+# Update graph and insights
 @app.callback(
     Output('trend-graph', 'figure'),
     Output('insight-output', 'children'),
@@ -139,7 +121,6 @@ def reset_to_demo(n_clicks):
 def update_graph_and_insights(data_records):
     data = pd.DataFrame(data_records)
     if not data.empty:
-        # Date is already datetime, no .dt.date here so time is kept
         fig = px.line(data, x='Date', y=['Mood', 'Energy'], title='Mood & Energy Over Time')
 
         recent = data.tail(5)
