@@ -22,22 +22,22 @@ def load_data():
     else:
         return pd.DataFrame(columns=['Date', 'Foods', 'Activities', 'Mood', 'Energy'])
 
-# Submission tracker
+# Initial states
 submission_times = []
-user_mode = {'demo': True}  # True means demo mode is active
 user_score = {'score': 0, 'counter': 0}
 demo_data = load_data()
 user_data = pd.DataFrame(columns=['Date', 'Foods', 'Activities', 'Mood', 'Energy'])
 
 # Layout
 app.layout = html.Div([
-    dcc.Store(id='memory-data', data=demo_data.to_dict('records')),
+    dcc.Store(id='demo-data', data=demo_data.to_dict('records')),
+    dcc.Store(id='user-data', data=user_data.to_dict('records')),
+    dcc.Store(id='active-mode', data='demo'),
+
     html.Div([
-        html.Div([
-            html.H1("🌱 MindFuel", style={'textAlign': 'left', 'display': 'inline-block'}),
-            html.Div(id='score-display', style={'fontSize': '18px', 'marginTop': '10px'})
-        ], style={'width': '100%', 'display': 'flex', 'justifyContent': 'space-between'})
-    ]),
+        html.H1("🌱 MindFuel", style={'textAlign': 'left'}),
+        html.Div(id='score-display', style={'fontSize': '18px', 'marginTop': '4px'})
+    ], style={'marginBottom': '10px'}),
 
     html.Div([
         html.Button("🌐 Demo Mode", id='demo-btn', n_clicks=0, style={'marginRight': '10px'}),
@@ -60,43 +60,42 @@ app.layout = html.Div([
     html.Div(id='insight-output', style={"padding": "10px", "border": "1px solid #ccc", "borderRadius": "10px", 'fontSize': '14px'})
 ])
 
-# Mode toggle
+# Toggle mode
 @app.callback(
     Output('submit-btn', 'disabled'),
-    Output('memory-data', 'data'),
+    Output('active-mode', 'data'),
     Input('demo-btn', 'n_clicks'),
     Input('track-btn', 'n_clicks')
 )
 def toggle_mode(demo_clicks, track_clicks):
     ctx = dash.callback_context
     if not ctx.triggered:
-        return True, demo_data.to_dict('records')
+        return True, 'demo'
     triggered = ctx.triggered[0]['prop_id'].split('.')[0]
     if triggered == 'track-btn':
-        user_mode['demo'] = False
-        return False, user_data.to_dict('records')
+        return False, 'user'
     else:
-        user_mode['demo'] = True
-        return True, demo_data.to_dict('records')
+        return True, 'demo'
 
-# Handle submit entry
+# Submit entry
 @app.callback(
-    Output('memory-data', 'data'),
+    Output('user-data', 'data'),
     Input('submit-btn', 'n_clicks'),
     State('food-input', 'value'),
     State('activity-input', 'value'),
     State('mood-input', 'value'),
     State('energy-input', 'value'),
-    State('memory-data', 'data')
+    State('user-data', 'data'),
+    State('active-mode', 'data')
 )
-def handle_entry(submit_clicks, foods, acts, mood, energy, data_records):
-    if submit_clicks == 0:
-        return data_records
+def handle_entry(submit_clicks, foods, acts, mood, energy, user_records, mode):
+    if mode != 'user' or submit_clicks == 0:
+        return user_records
 
     now = time.time()
     submission_times[:] = [t for t in submission_times if now - t < 3600]
     if len(submission_times) >= 5:
-        return data_records  # limit reached
+        return user_records
     submission_times.append(now)
 
     today = datetime.date.today()
@@ -107,11 +106,9 @@ def handle_entry(submit_clicks, foods, acts, mood, energy, data_records):
         "Mood": mood,
         "Energy": energy
     }
-    data = pd.DataFrame(data_records)
+    data = pd.DataFrame(user_records)
     new_entry_df = pd.DataFrame([new_row])
     data = pd.concat([data, new_entry_df], ignore_index=True)
-
-    user_data[:] = data
 
     if 'Healthy' in new_row['Foods'] or 'Exercise' in new_row['Activities']:
         user_score['score'] += 2
@@ -121,16 +118,19 @@ def handle_entry(submit_clicks, foods, acts, mood, energy, data_records):
 
     return data.to_dict('records')
 
-# Update graph, insights, score
+# Update graph/insight/score
 @app.callback(
     Output('trend-graph', 'figure'),
     Output('insight-output', 'children'),
     Output('score-display', 'children'),
-    Input('memory-data', 'data')
+    Input('demo-data', 'data'),
+    Input('user-data', 'data'),
+    Input('active-mode', 'data')
 )
-def update_outputs(data_records):
+def update_graphs(demo_records, user_records, mode):
+    data_records = demo_records if mode == 'demo' else user_records
     data = pd.DataFrame(data_records)
-    score_text = f"⭐ Score: {user_score['score']}"
+    score_text = f"⭐ Score: {user_score['score']}" if mode == 'user' else ""
 
     if not data.empty:
         data['Date'] = pd.to_datetime(data['Date']).dt.date
