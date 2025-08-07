@@ -5,8 +5,16 @@ import datetime
 import plotly.express as px
 import os
 import time
-import pickle
+
 from sklearn.preprocessing import MultiLabelBinarizer
+
+import pickle
+
+with open("mood_model.pkl", "rb") as f:
+    mood_model = pickle.load(f)
+
+with open("energy_model.pkl", "rb") as f:
+    energy_model = pickle.load(f)
 
 app = dash.Dash(__name__)
 server = app.server
