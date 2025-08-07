@@ -4,7 +4,7 @@ import pandas as pd
 import datetime
 import plotly.express as px
 import os
-import numpy as np
+import time
 
 app = dash.Dash(__name__)
 server = app.server
@@ -22,123 +22,119 @@ def load_data():
     else:
         return pd.DataFrame(columns=['Date', 'Foods', 'Activities', 'Mood', 'Energy'])
 
-# Generate demo data
-def generate_demo_data():
-    demo_data = []
-    start_date = datetime.datetime.now() - datetime.timedelta(days=29)
-    for i in range(30):
-        date = (start_date + datetime.timedelta(days=i)).date()
-        foods = list(np.random.choice(food_tags, size=np.random.randint(1, 3), replace=False))
-        acts = list(np.random.choice(activities, size=np.random.randint(1, 3), replace=False))
-        mood = np.random.randint(2, 6)
-        energy = np.random.randint(2, 6)
-        demo_data.append({
-            "Date": date,
-            "Foods": ', '.join(foods),
-            "Activities": ', '.join(acts),
-            "Mood": mood,
-            "Energy": energy
-        })
-    return pd.DataFrame(demo_data)
+# Submission tracker
+submission_times = []
+user_mode = {'demo': True}  # True means demo mode is active
+user_score = {'score': 0, 'counter': 0}
 
 # Layout
 app.layout = html.Div([
     dcc.Store(id='memory-data', data=load_data().to_dict('records')),
-    dcc.Store(id='mode', data='demo'),
-    dcc.Store(id='submit-count', data=0),
-    html.H1("\ud83c\udf31 MindFuel: Mood & Health Predictor", style={'textAlign': 'center'}),
+    html.Div([
+        html.H1("🌱 MindFuel", style={'textAlign': 'left', 'display': 'inline-block'}),
+        html.Div(id='score-display', style={'float': 'right', 'fontSize': '18px', 'marginTop': '15px'})
+    ], style={'width': '100%', 'display': 'flex', 'justifyContent': 'space-between'}),
 
     html.Div([
-        html.Button("View Demo Data", id='demo-btn', n_clicks=0),
-        html.Button("Track My Data", id='own-btn', n_clicks=0, style={'marginLeft': '10px'}),
-    ], style={'textAlign': 'center', 'marginBottom': '20px'}),
+        html.Button("🌐 Demo Mode", id='demo-btn', n_clicks=0, style={'marginRight': '10px'}),
+        html.Button("📊 Track My Data", id='track-btn', n_clicks=0, style={'marginRight': '10px'}),
+        html.Button("✅ Submit Entry", id='submit-btn', n_clicks=0, disabled=True)
+    ], style={'marginBottom': '10px'}),
 
     html.Div([
-        html.H3("\ud83d\udccb Log Your Day"),
         html.Label("Food Tags:"),
-        dcc.Dropdown(food_tags, multi=True, id='food-input'),
+        dcc.Dropdown(food_tags, multi=True, id='food-input', style={'marginBottom': '5px'}),
         html.Label("Activities:"),
-        dcc.Dropdown(activities, multi=True, id='activity-input'),
+        dcc.Dropdown(activities, multi=True, id='activity-input', style={'marginBottom': '5px'}),
         html.Label("Mood (1-5):"),
-        dcc.Slider(1, 5, 1, value=3, id='mood-input'),
+        dcc.Slider(1, 5, 1, value=3, id='mood-input', marks=None, tooltip={"placement": "bottom", "always_visible": True}),
         html.Label("Energy (1-5):"),
-        dcc.Slider(1, 5, 1, value=3, id='energy-input'),
-        html.Button("Submit Entry", id='submit-btn', n_clicks=0, disabled=True),
-    ], style={'width': '80%', 'margin': 'auto'}),
+        dcc.Slider(1, 5, 1, value=3, id='energy-input', marks=None, tooltip={"placement": "bottom", "always_visible": True}),
+    ], style={'width': '100%', 'maxWidth': '500px'}),
 
-    html.H3("\ud83d\udcc8 Mood & Energy Trends"),
-    dcc.Graph(id='trend-graph'),
-
-    html.H3("\ud83d\udc40 Predictive Insight"),
-    html.Div(id='insight-output', style={"padding": "10px", "border": "1px solid #ccc", "borderRadius": "10px"}),
-
-    html.Div(id='reward-penalty-output', style={'marginTop': '20px', 'fontWeight': 'bold'})
+    dcc.Graph(id='trend-graph', style={'height': '300px'}),
+    html.Div(id='insight-output', style={"padding": "10px", "border": "1px solid #ccc", "borderRadius": "10px", 'fontSize': '14px'})
 ])
 
-# Mode selection callback
+# Mode toggle
 @app.callback(
-    Output('mode', 'data'),
     Output('submit-btn', 'disabled'),
     Input('demo-btn', 'n_clicks'),
-    Input('own-btn', 'n_clicks'),
-    prevent_initial_call=True
+    Input('track-btn', 'n_clicks')
 )
-def switch_mode(demo_clicks, own_clicks):
+def toggle_mode(demo_clicks, track_clicks):
     ctx = dash.callback_context
     if not ctx.triggered:
-        raise dash.exceptions.PreventUpdate
-    button_id = ctx.triggered[0]['prop_id'].split('.')[0]
-    if button_id == 'demo-btn':
-        return 'demo', True
-    elif button_id == 'own-btn':
-        return 'own', False
-    raise dash.exceptions.PreventUpdate
+        return True
+    triggered = ctx.triggered[0]['prop_id'].split('.')[0]
+    if triggered == 'track-btn':
+        user_mode['demo'] = False
+        return False
+    else:
+        user_mode['demo'] = True
+        return True
 
-# Submit Entry with Limit
+# Handle demo or submit entry
 @app.callback(
     Output('memory-data', 'data'),
-    Output('submit-count', 'data'),
     Input('submit-btn', 'n_clicks'),
+    Input('demo-btn', 'n_clicks'),
     State('food-input', 'value'),
     State('activity-input', 'value'),
     State('mood-input', 'value'),
     State('energy-input', 'value'),
-    State('memory-data', 'data'),
-    State('submit-count', 'data'),
-    prevent_initial_call=True
+    State('memory-data', 'data')
 )
-def submit_entry(n_clicks, foods, acts, mood, energy, data_records, submit_count):
-    if n_clicks > 0 and submit_count < 5:
-        data = pd.DataFrame(data_records)
-        today = datetime.date.today()
-        new_row = {
-            "Date": today,
-            "Foods": ', '.join(foods) if foods else '',
-            "Activities": ', '.join(acts) if acts else '',
-            "Mood": mood,
-            "Energy": energy
-        }
-        data = pd.concat([data, pd.DataFrame([new_row])], ignore_index=True)
-        data.to_csv(DATA_FILE, index=False)
-        submit_count += 1
-    return data.to_dict('records'), submit_count
+def handle_entry(submit_clicks, demo_clicks, foods, acts, mood, energy, data_records):
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        return data_records
 
-# Update Graph, Insights, Rewards
+    triggered = ctx.triggered[0]['prop_id'].split('.')[0]
+    if triggered == 'submit-btn':
+        now = time.time()
+        # Keep only entries in the past hour
+        submission_times[:] = [t for t in submission_times if now - t < 3600]
+        if len(submission_times) >= 5:
+            return data_records  # limit reached
+        submission_times.append(now)
+
+    today = datetime.date.today()
+    new_row = {
+        "Date": today,
+        "Foods": ', '.join(foods) if foods else '',
+        "Activities": ', '.join(acts) if acts else '',
+        "Mood": mood,
+        "Energy": energy
+    }
+    data = pd.DataFrame(data_records)
+    new_entry_df = pd.DataFrame([new_row])
+    data = pd.concat([data, new_entry_df], ignore_index=True)
+
+    # Score update logic
+    if triggered != 'demo-btn':
+        if 'Healthy' in new_row['Foods'] or 'Exercise' in new_row['Activities']:
+            user_score['score'] += 2
+        if 'Sugary' in new_row['Foods'] or 'Junk' in new_row['Foods']:
+            user_score['score'] -= 1
+        user_score['counter'] += 1
+
+    return data.to_dict('records')
+
+# Update graph, insights, score
 @app.callback(
     Output('trend-graph', 'figure'),
     Output('insight-output', 'children'),
-    Output('reward-penalty-output', 'children'),
-    Input('memory-data', 'data'),
-    Input('mode', 'data')
+    Output('score-display', 'children'),
+    Input('memory-data', 'data')
 )
-def update_graph_and_insights(data_records, mode):
+def update_outputs(data_records):
     data = pd.DataFrame(data_records)
-    if mode == 'demo':
-        data = generate_demo_data()
+    score_text = f"⭐ Score: {user_score['score']}"
 
     if not data.empty:
         data['Date'] = pd.to_datetime(data['Date']).dt.date
-        fig = px.line(data, x='Date', y=['Mood', 'Energy'], title='Mood & Energy Over Time', range_y=[1, 5] if mode=='demo' else None)
+        fig = px.line(data, x='Date', y=['Mood', 'Energy'], title='')
 
         recent = data.tail(5)
         all_foods = ','.join(recent['Foods'].dropna())
@@ -146,29 +142,18 @@ def update_graph_and_insights(data_records, mode):
 
         insight = []
         if recent['Mood'].mean() > 3.5:
-            insight.append("\ud83d\ude0a You're on a roll! Mood's been great lately.")
+            insight.append("😊 Great mood lately!")
         if 'Sugary' in all_foods:
-            insight.append("\ud83c\udf6d High sugar intake might be affecting energy consistency.")
+            insight.append("🍭 Watch sugar intake.")
         if 'Exercise' in all_acts:
-            insight.append("\ud83d\udcaa Days with exercise usually show higher energy.")
+            insight.append("💪 Exercise helps energy!")
         if not insight:
-            insight = ["\ud83d\udcca Not enough data yet to detect trends. Keep logging!"]
-
-        # Rewards/Penalties every 5 entries
-        reward_penalty = ""
-        if len(data) % 5 == 0:
-            score = 0
-            score += all_foods.count('Healthy') * 2
-            score -= all_foods.count('Junk') * 2
-            score -= all_foods.count('Sugary')
-            score += all_acts.count('Exercise') * 3
-            reward_penalty = f"\ud83c\udf1f Reward Score: {score}" if score > 0 else f"\u26a0\ufe0f Penalty Score: {score}"
+            insight = ["📊 Keep logging to see insights."]
     else:
-        fig = px.line(title="No data available")
-        insight = ["\ud83d\udcca No data to display yet."]
-        reward_penalty = ""
+        fig = px.line(title="No data yet")
+        insight = ["📊 No data to show."]
 
-    return fig, html.Ul([html.Li(i) for i in insight]), reward_penalty
+    return fig, html.Ul([html.Li(i) for i in insight]), score_text
 
 if __name__ == '__main__':
-    app.run_server(debug=False)
+    app.run_server(debug=True)
