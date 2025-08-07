@@ -5,7 +5,6 @@ import datetime
 import plotly.express as px
 import numpy as np
 import os
-import time
 
 app = dash.Dash(__name__)
 server = app.server
@@ -14,21 +13,42 @@ DATA_FILE = "data.csv"
 food_tags = ['Healthy', 'Sugary', 'Junk', 'Protein', 'Carbs']
 activities = ['Exercise', 'Socializing', 'Gaming', 'Studying', 'Outdoors', 'None']
 
+# Load data from CSV if exists
 def load_data():
     if os.path.exists(DATA_FILE):
         df = pd.read_csv(DATA_FILE)
-        df['Date'] = pd.to_datetime(df['Date'])
+        df['Date'] = pd.to_datetime(df['Date']).dt.date
         return df
     else:
         return pd.DataFrame(columns=['Date', 'Foods', 'Activities', 'Mood', 'Energy'])
 
-# Store the timestamp of the last submit
-last_submit_time = 0
+# Generate demo data
+def generate_demo_data():
+    demo_data = []
+    start_date = datetime.datetime.now() - datetime.timedelta(days=29)
 
+    for i in range(30):
+        date = (start_date + datetime.timedelta(days=i)).date()
+        foods = list(np.random.choice(food_tags, size=np.random.randint(1, 3), replace=False))
+        acts = list(np.random.choice(activities, size=np.random.randint(1, 3), replace=False))
+        mood = np.random.randint(2, 6)
+        energy = np.random.randint(2, 6)
+
+        demo_data.append({
+            "Date": date,
+            "Foods": ', '.join(foods),
+            "Activities": ', '.join(acts),
+            "Mood": mood,
+            "Energy": energy
+        })
+
+    return pd.DataFrame(demo_data)
+
+# Layout
 app.layout = html.Div([
     dcc.Store(id='memory-data', data=load_data().to_dict('records')),
-    dcc.Store(id='last-submit', data=0),  # Store last submit timestamp in client memory
     html.H1("🌱 MindFuel: Mood & Health Predictor", style={'textAlign': 'center'}),
+
     html.Div([
         html.H3("📋 Log Your Day"),
         html.Label("Food Tags:"),
@@ -39,9 +59,10 @@ app.layout = html.Div([
         dcc.Slider(1, 5, 1, value=3, id='mood-input'),
         html.Label("Energy (1-5):"),
         dcc.Slider(1, 5, 1, value=3, id='energy-input'),
+
         html.Button("Submit Entry", id='submit-btn', n_clicks=0),
         html.Button("Simulate Entry", id='simulate-btn', n_clicks=0, style={'marginLeft': '10px'}),
-        html.Div(id='submit-message', style={'color': 'red', 'marginTop': '10px'})
+        html.Button("Reset to Demo", id='reset-btn', n_clicks=0, style={'marginLeft': '10px'}),
     ], style={'width': '80%', 'margin': 'auto'}),
 
     html.H3("📈 Mood & Energy Trends"),
@@ -51,68 +72,60 @@ app.layout = html.Div([
     html.Div(id='insight-output', style={"padding": "10px", "border": "1px solid #ccc", "borderRadius": "10px"})
 ])
 
-# Submit Entry callback with 1-minute cooldown
+# Unified callback for Submit, Simulate, and Reset
 @app.callback(
     Output('memory-data', 'data'),
-    Output('submit-message', 'children'),
-    Output('last-submit', 'data'),
     Input('submit-btn', 'n_clicks'),
+    Input('simulate-btn', 'n_clicks'),
+    Input('reset-btn', 'n_clicks'),
     State('food-input', 'value'),
     State('activity-input', 'value'),
     State('mood-input', 'value'),
     State('energy-input', 'value'),
     State('memory-data', 'data'),
-    State('last-submit', 'data'),
     prevent_initial_call=True
 )
-def submit_entry(n_clicks, foods, acts, mood, energy, data_records, last_submit_timestamp):
-    now_ts = time.time()
-    # Check cooldown: only allow if >60 seconds since last submit
-    if now_ts - last_submit_timestamp < 60:
-        return data_records, "⏳ Please wait before submitting again (1 min cooldown).", last_submit_timestamp
+def update_data(submit_clicks, simulate_clicks, reset_clicks, foods, acts, mood, energy, data_records):
+    ctx = dash.callback_context
 
+    if not ctx.triggered:
+        raise dash.exceptions.PreventUpdate
+
+    button_id = ctx.triggered[0]['prop_id'].split('.')[0]
     data = pd.DataFrame(data_records)
-    now = datetime.datetime.now()
 
-    new_row = {
-        "Date": now,
-        "Foods": ', '.join(foods) if foods else '',
-        "Activities": ', '.join(acts) if acts else '',
-        "Mood": mood,
-        "Energy": energy
-    }
-    data = pd.concat([data, pd.DataFrame([new_row])], ignore_index=True)
-    data.to_csv(DATA_FILE, index=False)
-    return data.to_dict('records'), "", now_ts
+    if button_id == 'reset-btn':
+        data = generate_demo_data()
+    elif button_id == 'simulate-btn':
+        today = datetime.date.today()
+        demo_foods = list(np.random.choice(food_tags, size=np.random.randint(1, 3), replace=False))
+        demo_acts = list(np.random.choice(activities, size=np.random.randint(1, 3), replace=False))
+        demo_mood = np.random.randint(2, 6)
+        demo_energy = np.random.randint(2, 6)
 
-# Simulate Entry callback (demo)
-@app.callback(
-    Output('memory-data', 'data'),
-    Input('simulate-btn', 'n_clicks'),
-    State('memory-data', 'data'),
-    prevent_initial_call=True
-)
-def simulate_entry(n_clicks, data_records):
-    data = pd.DataFrame(data_records)
-    now = datetime.datetime.now()
+        new_row = {
+            "Date": today,
+            "Foods": ', '.join(demo_foods),
+            "Activities": ', '.join(demo_acts),
+            "Mood": demo_mood,
+            "Energy": demo_energy
+        }
+        data = pd.concat([data, pd.DataFrame([new_row])], ignore_index=True)
+    elif button_id == 'submit-btn':
+        today = datetime.date.today()
+        new_row = {
+            "Date": today,
+            "Foods": ', '.join(foods) if foods else '',
+            "Activities": ', '.join(acts) if acts else '',
+            "Mood": mood,
+            "Energy": energy
+        }
+        data = pd.concat([data, pd.DataFrame([new_row])], ignore_index=True)
 
-    demo_foods = list(np.random.choice(food_tags, size=np.random.randint(1, 3), replace=False))
-    demo_acts = list(np.random.choice(activities, size=np.random.randint(1, 3), replace=False))
-    demo_mood = np.random.randint(2, 6)
-    demo_energy = np.random.randint(2, 6)
-
-    new_row = {
-        "Date": now,
-        "Foods": ', '.join(demo_foods),
-        "Activities": ', '.join(demo_acts),
-        "Mood": demo_mood,
-        "Energy": demo_energy
-    }
-    data = pd.concat([data, pd.DataFrame([new_row])], ignore_index=True)
     data.to_csv(DATA_FILE, index=False)
     return data.to_dict('records')
 
-# Update graph and insights
+# Update Graph and Insights
 @app.callback(
     Output('trend-graph', 'figure'),
     Output('insight-output', 'children'),
@@ -121,6 +134,7 @@ def simulate_entry(n_clicks, data_records):
 def update_graph_and_insights(data_records):
     data = pd.DataFrame(data_records)
     if not data.empty:
+        data['Date'] = pd.to_datetime(data['Date']).dt.date
         fig = px.line(data, x='Date', y=['Mood', 'Energy'], title='Mood & Energy Over Time')
 
         recent = data.tail(5)
