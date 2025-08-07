@@ -1,31 +1,51 @@
 Date,Foods,Activities,Mood,Energy
-2025-07-08,Junk,"Outdoors, None",3,4
-2025-07-09,"Junk, Protein",Gaming,5,3
-2025-07-10,Carbs,Gaming,3,5
-2025-07-11,Carbs,None,3,4
-2025-07-12,Carbs,"Socializing, Gaming",4,3
-2025-07-13,Carbs,Socializing,3,4
-2025-07-14,Protein,Studying,3,5
-2025-07-15,Carbs,Gaming,4,3
-2025-07-16,"Sugary, Carbs",Outdoors,5,4
-2025-07-17,Carbs,"None, Socializing",3,3
-2025-07-18,Protein,Exercise,4,3
-2025-07-19,"Sugary, Carbs",Exercise,5,5
-2025-07-20,Junk,None,4,3
-2025-07-21,"Sugary, Carbs","Socializing, Studying",5,4
-2025-07-22,Protein,"Gaming, None",4,5
-2025-07-23,"Protein, Healthy","Gaming, Outdoors",5,5
-2025-07-24,"Sugary, Healthy","None, Socializing",5,4
-2025-07-25,Carbs,"Studying, Exercise",3,3
-2025-07-26,"Sugary, Healthy",None,3,3
-2025-07-27,"Junk, Protein","Studying, Exercise",3,3
-2025-07-28,"Healthy, Junk","Outdoors, None",5,5
-2025-07-29,"Junk, Sugary","Studying, Exercise",5,5
-2025-07-30,"Sugary, Junk",Socializing,3,3
-2025-07-31,Sugary,Gaming,4,5
-2025-08-01,"Healthy, Protein","Exercise, Gaming",3,4
-2025-08-02,"Carbs, Healthy",None,3,3
-2025-08-03,"Healthy, Protein",Outdoors,4,4
-2025-08-04,"Sugary, Junk","Gaming, Exercise",3,4
-2025-08-05,"Healthy, Sugary",Exercise,4,4
-2025-08-06,"Junk, Healthy",Socializing,4,4
+2025-06-18,Sugary,"Studying, Exercise",3,2
+2025-06-19,Healthy,Exercise,4,3
+2025-06-20,"Junk, Protein",None,2,3
+2025-06-21,"Healthy, Sugary","Socializing, Studying",3,3
+2025-06-22,Healthy,Socializing,4,3
+2025-06-23,"Healthy, Junk","Outdoors, Gaming",3,4
+2025-06-24,"Healthy, Carbs",Outdoors,4,4
+2025-06-25,Junk,"Socializing, Gaming",2,3
+2025-06-26,Sugary,"None, Outdoors",2,3
+2025-06-27,"Protein, Healthy",Studying,4,4
+2025-06-28,Sugary,"None, Outdoors",3,3
+2025-06-29,Carbs,None,4,3
+2025-06-30,"Junk, Protein",Exercise,3,4
+2025-07-01,"Protein, Carbs",Outdoors,2,4
+2025-07-02,"Carbs, Protein",Outdoors,3,3
+2025-07-03,Junk,"Exercise, Outdoors",2,4
+2025-07-04,"Protein, Sugary","Socializing, Gaming",2,3
+2025-07-05,"Healthy, Junk",Socializing,3,4
+2025-07-06,"Junk, Healthy",Outdoors,3,4
+2025-07-07,"Healthy, Sugary",Exercise,4,3
+2025-07-08,Carbs,"Studying, Outdoors",3,4
+2025-07-09,"Junk, Carbs","Studying, Gaming",2,3
+2025-07-10,Sugary,"Exercise, None",4,3
+2025-07-11,"Sugary, Protein","Gaming, Exercise",3,3
+2025-07-12,Junk,"Outdoors, Socializing",2,3
+2025-07-13,Healthy,None,4,4
+2025-07-14,Carbs,Gaming,3,3
+2025-07-15,"Sugary, Junk","None, Socializing",2,1
+2025-07-16,Carbs,"None, Studying",3,2
+2025-07-17,Healthy,"None, Gaming",3,3
+2025-07-18,Protein,"Gaming, None",3,4
+2025-07-19,Sugary,"Outdoors, Exercise",3,3
+2025-07-20,Healthy,"Gaming, None",3,3
+2025-07-21,Sugary,"Gaming, Exercise",3,3
+2025-07-22,"Healthy, Junk",Outdoors,3,3
+2025-07-23,"Sugary, Junk","Outdoors, Studying",3,3
+2025-07-24,"Junk, Sugary",Exercise,2,2
+2025-07-25,"Protein, Junk",Outdoors,1,4
+2025-07-26,Healthy,"Exercise, None",4,4
+2025-07-27,Protein,Outdoors,3,5
+2025-07-28,Sugary,None,3,1
+2025-07-29,Protein,Exercise,3,3
+2025-07-30,Junk,Socializing,2,3
+2025-07-31,Sugary,None,3,2
+2025-08-01,Sugary,Outdoors,3,5
+2025-08-02,Sugary,"None, Socializing",3,2
+2025-08-03,Carbs,"Studying, Socializing",4,3
+2025-08-04,Sugary,"Outdoors, Studying",4,3
+2025-08-05,Carbs,"None, Studying",3,3
+2025-08-06,"Carbs, Healthy",Socializing,4,3
