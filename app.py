@@ -26,14 +26,18 @@ def load_data():
 submission_times = []
 user_mode = {'demo': True}  # True means demo mode is active
 user_score = {'score': 0, 'counter': 0}
+demo_data = load_data()
+user_data = pd.DataFrame(columns=['Date', 'Foods', 'Activities', 'Mood', 'Energy'])
 
 # Layout
 app.layout = html.Div([
-    dcc.Store(id='memory-data', data=load_data().to_dict('records')),
+    dcc.Store(id='memory-data', data=demo_data.to_dict('records')),
     html.Div([
-        html.H1("🌱 MindFuel", style={'textAlign': 'left', 'display': 'inline-block'}),
-        html.Div(id='score-display', style={'float': 'right', 'fontSize': '18px', 'marginTop': '15px'})
-    ], style={'width': '100%', 'display': 'flex', 'justifyContent': 'space-between'}),
+        html.Div([
+            html.H1("🌱 MindFuel", style={'textAlign': 'left', 'display': 'inline-block'}),
+            html.Div(id='score-display', style={'fontSize': '18px', 'marginTop': '10px'})
+        ], style={'width': '100%', 'display': 'flex', 'justifyContent': 'space-between'})
+    ]),
 
     html.Div([
         html.Button("🌐 Demo Mode", id='demo-btn', n_clicks=0, style={'marginRight': '10px'}),
@@ -52,52 +56,48 @@ app.layout = html.Div([
         dcc.Slider(1, 5, 1, value=3, id='energy-input', marks=None, tooltip={"placement": "bottom", "always_visible": True}),
     ], style={'width': '100%', 'maxWidth': '500px'}),
 
-    dcc.Graph(id='trend-graph', style={'height': '300px'}),
+    dcc.Graph(id='trend-graph', style={'height': '250px'}),
     html.Div(id='insight-output', style={"padding": "10px", "border": "1px solid #ccc", "borderRadius": "10px", 'fontSize': '14px'})
 ])
 
 # Mode toggle
 @app.callback(
     Output('submit-btn', 'disabled'),
+    Output('memory-data', 'data'),
     Input('demo-btn', 'n_clicks'),
     Input('track-btn', 'n_clicks')
 )
 def toggle_mode(demo_clicks, track_clicks):
     ctx = dash.callback_context
     if not ctx.triggered:
-        return True
+        return True, demo_data.to_dict('records')
     triggered = ctx.triggered[0]['prop_id'].split('.')[0]
     if triggered == 'track-btn':
         user_mode['demo'] = False
-        return False
+        return False, user_data.to_dict('records')
     else:
         user_mode['demo'] = True
-        return True
+        return True, demo_data.to_dict('records')
 
-# Handle demo or submit entry
+# Handle submit entry
 @app.callback(
     Output('memory-data', 'data'),
     Input('submit-btn', 'n_clicks'),
-    Input('demo-btn', 'n_clicks'),
     State('food-input', 'value'),
     State('activity-input', 'value'),
     State('mood-input', 'value'),
     State('energy-input', 'value'),
     State('memory-data', 'data')
 )
-def handle_entry(submit_clicks, demo_clicks, foods, acts, mood, energy, data_records):
-    ctx = dash.callback_context
-    if not ctx.triggered:
+def handle_entry(submit_clicks, foods, acts, mood, energy, data_records):
+    if submit_clicks == 0:
         return data_records
 
-    triggered = ctx.triggered[0]['prop_id'].split('.')[0]
-    if triggered == 'submit-btn':
-        now = time.time()
-        # Keep only entries in the past hour
-        submission_times[:] = [t for t in submission_times if now - t < 3600]
-        if len(submission_times) >= 5:
-            return data_records  # limit reached
-        submission_times.append(now)
+    now = time.time()
+    submission_times[:] = [t for t in submission_times if now - t < 3600]
+    if len(submission_times) >= 5:
+        return data_records  # limit reached
+    submission_times.append(now)
 
     today = datetime.date.today()
     new_row = {
@@ -111,13 +111,13 @@ def handle_entry(submit_clicks, demo_clicks, foods, acts, mood, energy, data_rec
     new_entry_df = pd.DataFrame([new_row])
     data = pd.concat([data, new_entry_df], ignore_index=True)
 
-    # Score update logic
-    if triggered != 'demo-btn':
-        if 'Healthy' in new_row['Foods'] or 'Exercise' in new_row['Activities']:
-            user_score['score'] += 2
-        if 'Sugary' in new_row['Foods'] or 'Junk' in new_row['Foods']:
-            user_score['score'] -= 1
-        user_score['counter'] += 1
+    user_data[:] = data
+
+    if 'Healthy' in new_row['Foods'] or 'Exercise' in new_row['Activities']:
+        user_score['score'] += 2
+    if 'Sugary' in new_row['Foods'] or 'Junk' in new_row['Foods']:
+        user_score['score'] -= 1
+    user_score['counter'] += 1
 
     return data.to_dict('records')
 
