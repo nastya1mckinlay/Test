@@ -5,29 +5,29 @@ import datetime
 import plotly.express as px
 import numpy as np
 import os
+import dash_bootstrap_components as dbc
 
-app = dash.Dash(__name__)
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 server = app.server
 
 DATA_FILE = "data.csv"
 food_tags = ['Healthy', 'Sugary', 'Junk', 'Protein', 'Carbs']
 activities = ['Exercise', 'Socializing', 'Gaming', 'Studying', 'Outdoors', 'None']
 
-# Load initial data
+# Load data from CSV if exists
 def load_data():
     if os.path.exists(DATA_FILE):
         df = pd.read_csv(DATA_FILE)
-        df['Date'] = pd.to_datetime(df['Date']).dt.date
+        df['Date'] = pd.to_datetime(df['Date'])
         return df
     else:
         return pd.DataFrame(columns=['Date', 'Foods', 'Activities', 'Mood', 'Energy'])
 
-# Generate Demo Data
-def generate_demo_data(days=30):
+# Generate demo data
+def generate_demo_data():
     demo_data = []
-    start_date = datetime.date.today() - datetime.timedelta(days=days-1)
-
-    for i in range(days):
+    start_date = datetime.datetime.now() - datetime.timedelta(days=29)
+    for i in range(30):
         date = start_date + datetime.timedelta(days=i)
         foods = list(np.random.choice(food_tags, size=np.random.randint(1, 3), replace=False))
         acts = list(np.random.choice(activities, size=np.random.randint(1, 3), replace=False))
@@ -41,13 +41,16 @@ def generate_demo_data(days=30):
             "Mood": mood,
             "Energy": energy
         })
-
     return pd.DataFrame(demo_data)
 
 # Layout
 app.layout = html.Div([
     dcc.Store(id='memory-data', data=load_data().to_dict('records')),
+    dcc.Store(id='alert-trigger', data=""),
     html.H1("🌱 MindFuel: Mood & Health Predictor", style={'textAlign': 'center'}),
+
+    dbc.Toast(id="action-alert", header="Update", is_open=False, dismissable=True, duration=3000, icon="info", style={"position": "fixed", "top": 10, "right": 10, "zIndex": 9999}),
+
     html.Div([
         html.H3("📋 Log Your Day"),
         html.Label("Food Tags:"),
@@ -58,9 +61,10 @@ app.layout = html.Div([
         dcc.Slider(1, 5, 1, value=3, id='mood-input'),
         html.Label("Energy (1-5):"),
         dcc.Slider(1, 5, 1, value=3, id='energy-input'),
+
         html.Button("Submit Entry", id='submit-btn', n_clicks=0),
         html.Button("Simulate Entry", id='simulate-btn', n_clicks=0, style={'marginLeft': '10px'}),
-        html.Button("Reset to Demo Data", id='reset-btn', n_clicks=0, style={'marginLeft': '10px'}),
+        html.Button("Reset to Demo", id='reset-btn', n_clicks=0, style={'marginLeft': '10px'}),
     ], style={'width': '80%', 'margin': 'auto'}),
 
     html.H3("📈 Mood & Energy Trends"),
@@ -70,9 +74,10 @@ app.layout = html.Div([
     html.Div(id='insight-output', style={"padding": "10px", "border": "1px solid #ccc", "borderRadius": "10px"})
 ])
 
-# Unified callback for Submit and Simulate Entry
+# Unified callback for Submit, Simulate, Reset + Toast Trigger
 @app.callback(
     Output('memory-data', 'data'),
+    Output('alert-trigger', 'data'),
     Input('submit-btn', 'n_clicks'),
     Input('simulate-btn', 'n_clicks'),
     Input('reset-btn', 'n_clicks'),
@@ -83,43 +88,43 @@ app.layout = html.Div([
     State('memory-data', 'data'),
     prevent_initial_call=True
 )
-def handle_entries(submit_clicks, simulate_clicks, reset_clicks, foods, acts, mood, energy, data_records):
-    triggered_id = ctx.triggered_id
-
-    if triggered_id == 'reset-btn':
-        demo_data = generate_demo_data(days=30)
-        demo_data.to_csv(DATA_FILE, index=False)
-        return demo_data.to_dict('records')
-
+def update_data(submit_clicks, simulate_clicks, reset_clicks, foods, acts, mood, energy, data_records):
+    button_id = ctx.triggered_id
     data = pd.DataFrame(data_records)
-    today = datetime.date.today()
 
-    if triggered_id == 'simulate-btn':
+    if button_id == 'reset-btn':
+        data = generate_demo_data()
+        alert_msg = "Reset to Demo Data!"
+    elif button_id == 'simulate-btn':
+        now = datetime.datetime.now()
         demo_foods = list(np.random.choice(food_tags, size=np.random.randint(1, 3), replace=False))
         demo_acts = list(np.random.choice(activities, size=np.random.randint(1, 3), replace=False))
         demo_mood = np.random.randint(2, 6)
         demo_energy = np.random.randint(2, 6)
+
         new_row = {
-            "Date": today,
+            "Date": now,
             "Foods": ', '.join(demo_foods),
             "Activities": ', '.join(demo_acts),
             "Mood": demo_mood,
             "Energy": demo_energy
         }
-    elif triggered_id == 'submit-btn':
+        data = pd.concat([data, pd.DataFrame([new_row])], ignore_index=True)
+        alert_msg = "Demo Entry Added!"
+    elif button_id == 'submit-btn':
+        now = datetime.datetime.now()
         new_row = {
-            "Date": today,
+            "Date": now,
             "Foods": ', '.join(foods) if foods else '',
             "Activities": ', '.join(acts) if acts else '',
             "Mood": mood,
             "Energy": energy
         }
-    else:
-        raise dash.exceptions.PreventUpdate
+        data = pd.concat([data, pd.DataFrame([new_row])], ignore_index=True)
+        alert_msg = "Your Entry Submitted!"
 
-    data = pd.concat([data, pd.DataFrame([new_row])], ignore_index=True)
     data.to_csv(DATA_FILE, index=False)
-    return data.to_dict('records')
+    return data.to_dict('records'), alert_msg
 
 # Update Graph and Insights
 @app.callback(
@@ -130,7 +135,7 @@ def handle_entries(submit_clicks, simulate_clicks, reset_clicks, foods, acts, mo
 def update_graph_and_insights(data_records):
     data = pd.DataFrame(data_records)
     if not data.empty:
-        data['Date'] = pd.to_datetime(data['Date']).dt.date
+        data['Date'] = pd.to_datetime(data['Date'])
         fig = px.line(data, x='Date', y=['Mood', 'Energy'], title='Mood & Energy Over Time')
 
         recent = data.tail(5)
@@ -146,11 +151,24 @@ def update_graph_and_insights(data_records):
             insight.append("💪 Days with exercise usually show higher energy.")
         if not insight:
             insight = ["📊 Not enough data yet to detect trends. Keep logging!"]
+
     else:
         fig = px.line(title="No data available")
         insight = ["📊 No data to display yet."]
 
     return fig, html.Ul([html.Li(i) for i in insight])
+
+# Show Toast Alerts
+@app.callback(
+    Output("action-alert", "children"),
+    Output("action-alert", "is_open"),
+    Input("alert-trigger", "data"),
+    prevent_initial_call=True
+)
+def show_alert(alert_msg):
+    if alert_msg:
+        return alert_msg, True
+    raise dash.exceptions.PreventUpdate
 
 if __name__ == '__main__':
     app.run_server(debug=True)
