@@ -26,11 +26,13 @@ def load_data():
 submission_times = []
 user_score = {'score': 0, 'counter': 0}
 demo_data = pd.DataFrame([
-    {"Date": datetime.date.today() - datetime.timedelta(days=4), "Foods": "Healthy", "Activities": "Exercise", "Mood": 5, "Energy": 5},
-    {"Date": datetime.date.today() - datetime.timedelta(days=3), "Foods": "Junk", "Activities": "Gaming", "Mood": 2, "Energy": 2},
-    {"Date": datetime.date.today() - datetime.timedelta(days=2), "Foods": "Sugary", "Activities": "Socializing", "Mood": 3, "Energy": 2},
-    {"Date": datetime.date.today() - datetime.timedelta(days=1), "Foods": "Healthy", "Activities": "Outdoors", "Mood": 4, "Energy": 4},
-    {"Date": datetime.date.today(), "Foods": "Protein", "Activities": "Studying", "Mood": 3, "Energy": 3},
+    {"Date": datetime.date.today() - datetime.timedelta(days=6), "Foods": "Healthy", "Activities": "Exercise", "Mood": 5, "Energy": 5},
+    {"Date": datetime.date.today() - datetime.timedelta(days=5), "Foods": "Junk", "Activities": "Gaming", "Mood": 2, "Energy": 2},
+    {"Date": datetime.date.today() - datetime.timedelta(days=4), "Foods": "Sugary", "Activities": "Party", "Mood": 3, "Energy": 2},
+    {"Date": datetime.date.today() - datetime.timedelta(days=3), "Foods": "Healthy", "Activities": "Outdoors", "Mood": 4, "Energy": 4},
+    {"Date": datetime.date.today() - datetime.timedelta(days=2), "Foods": "Protein", "Activities": "Studying", "Mood": 3, "Energy": 3},
+    {"Date": datetime.date.today() - datetime.timedelta(days=1), "Foods": "Carbs", "Activities": "Socializing", "Mood": 4, "Energy": 3},
+    {"Date": datetime.date.today(), "Foods": "Healthy, Protein", "Activities": "Exercise", "Mood": 5, "Energy": 5},
 ])
 user_data = pd.DataFrame(columns=['Date', 'Foods', 'Activities', 'Mood', 'Energy'])
 
@@ -114,7 +116,7 @@ def handle_entry(submit_clicks, foods, acts, mood, energy, user_records, mode):
     }
     data = pd.DataFrame(user_records)
     new_entry_df = pd.DataFrame([new_row])
-    data = pd.concat([data, new_entry_df], ignore_index=True)
+    data = pd.concat([data, new_entry_df], ignore_index=True).tail(20)
 
     if 'Healthy' in new_row['Foods'] or 'Exercise' in new_row['Activities']:
         user_score['score'] += 2
@@ -140,7 +142,13 @@ def update_graphs(demo_records, user_records, mode):
 
     if not data.empty:
         data['Date'] = pd.to_datetime(data['Date']).dt.date
-        fig = px.line(data, x='Date', y=['Mood', 'Energy'], title='')
+        if mode == 'user':
+            data = data.tail(20)
+            data['group'] = (data.index // 5) * 5
+            grouped = data.groupby('group').mean(numeric_only=True).reset_index()
+            fig = px.line(grouped, x='group', y=['Mood', 'Energy'], title='')
+        else:
+            fig = px.line(data, x='Date', y=['Mood', 'Energy'], title='')
 
         recent = data.tail(5)
         all_foods = ','.join(recent['Foods'].dropna())
