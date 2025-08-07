@@ -25,7 +25,13 @@ def load_data():
 # Initial states
 submission_times = []
 user_score = {'score': 0, 'counter': 0}
-demo_data = load_data()
+demo_data = pd.DataFrame([
+    {"Date": datetime.date.today() - datetime.timedelta(days=4), "Foods": "Healthy", "Activities": "Exercise", "Mood": 5, "Energy": 5},
+    {"Date": datetime.date.today() - datetime.timedelta(days=3), "Foods": "Junk", "Activities": "Gaming", "Mood": 2, "Energy": 2},
+    {"Date": datetime.date.today() - datetime.timedelta(days=2), "Foods": "Sugary", "Activities": "Socializing", "Mood": 3, "Energy": 2},
+    {"Date": datetime.date.today() - datetime.timedelta(days=1), "Foods": "Healthy", "Activities": "Outdoors", "Mood": 4, "Energy": 4},
+    {"Date": datetime.date.today(), "Foods": "Protein", "Activities": "Studying", "Mood": 3, "Energy": 3},
+])
 user_data = pd.DataFrame(columns=['Date', 'Foods', 'Activities', 'Mood', 'Energy'])
 
 # Layout
@@ -147,6 +153,8 @@ def update_graphs(demo_records, user_records, mode):
             insight.append("🍭 Watch sugar intake.")
         if 'Exercise' in all_acts:
             insight.append("💪 Exercise helps energy!")
+        if 'Junk' in all_foods and recent['Mood'].mean() < 3:
+            insight.append("🍔 Junk food may be lowering mood.")
         if not insight:
             insight = ["📊 Keep logging to see insights."]
     else:
