@@ -4,6 +4,10 @@ import pandas as pd
 import plotly.graph_objs as go
 import datetime
 import os
+import base64
+import io
+from sklearn.linear_model import LinearRegression
+import numpy as np
 
 # Load your mood_energy_dataset.csv with your columns
 DATA_FILE = "mood_energy_dataset.csv"
@@ -23,7 +27,7 @@ scenario_options = [
 ]
 
 # Time horizons (hours) from your column suffixes
-horizons = [0, 2, 6, 12, 24, 48]  # Added 0 for current time
+horizons = [0, 2, 6, 12, 24, 48]  # Added 0 for initial time
 
 app = dash.Dash(__name__)
 server = app.server
@@ -45,7 +49,27 @@ app.layout = html.Div([
     html.Div(id="insight-output", style={"marginTop": "20px", "fontSize": "18px"}),
 
     html.Hr(),
-    html.H3("Add Your Data (User Mode) - Coming Soon!"),
+    html.H3("Upload Your Own Data & See Predictions"),
+
+    dcc.Upload(
+        id='upload-data',
+        children=html.Div(['Drag and Drop or ', html.A('Select a CSV file')]),
+        style={
+            'width': '50%',
+            'height': '60px',
+            'lineHeight': '60px',
+            'borderWidth': '1px',
+            'borderStyle': 'dashed',
+            'borderRadius': '5px',
+            'textAlign': 'center',
+            'margin': '10px'
+        },
+        multiple=False
+    ),
+
+    dcc.Graph(id='user-prediction-graph', style={"marginTop": "40px"}),
+
+    html.Div(id="upload-insight-output", style={"marginTop": "20px", "fontSize": "16px", "color": "orange"})
 ])
 
 @app.callback(
@@ -60,11 +84,10 @@ def update_trends(selected_idx):
     # Select row by index
     row = mood_energy_df.iloc[selected_idx]
 
-    # Extract mood and energy values including time 0 now
-    mood_vals = [row["mood_now"]] + [row[f"mood_{h}h"] for h in horizons if h != 0]
-    energy_vals = [row["energy_now"]] + [row[f"energy_{h}h"] for h in horizons if h != 0]
+    # Extract mood and energy values at horizons including time 0
+    mood_vals = [row['mood_now']] + [row[f"mood_{h}h"] for h in horizons if h != 0]
+    energy_vals = [row['energy_now']] + [row[f"energy_{h}h"] for h in horizons if h != 0]
 
-    # Create traces for mood and energy
     fig = go.Figure()
 
     fig.add_trace(go.Scatter(
@@ -112,6 +135,59 @@ def update_trends(selected_idx):
     insight_html = html.Ul([html.Li(i) for i in insights])
 
     return fig, insight_html
+
+
+@app.callback(
+    Output('user-prediction-graph', 'figure'),
+    Output('upload-insight-output', 'children'),
+    Input('upload-data', 'contents'),
+    State('upload-data', 'filename')
+)
+def process_uploaded_file(contents, filename):
+    if contents is None:
+        return go.Figure(), ""
+
+    content_type, content_string = contents.split(',')
+    decoded = base64.b64decode(content_string)
+    try:
+        # Assume CSV file
+        df = pd.read_csv(io.StringIO(decoded.decode('utf-8')))
+    except Exception as e:
+        return go.Figure(layout={'title': f'Error loading file: {str(e)}'}), ""
+
+    # Check for required columns
+    required_cols = {'mood_now', 'energy_now', 'mood_48h', 'energy_48h'}
+    if not required_cols.issubset(set(df.columns)):
+        return go.Figure(layout={'title': 'CSV missing required columns: mood_now, energy_now, mood_48h, energy_48h'}), ""
+
+    # Train simple Linear Regression models to predict 48h mood and energy from current mood and energy
+    features = df[['mood_now', 'energy_now']].values
+    target_mood = df['mood_48h'].values
+    target_energy = df['energy_48h'].values
+
+    model_mood = LinearRegression().fit(features, target_mood)
+    model_energy = LinearRegression().fit(features, target_energy)
+
+    preds_mood = model_mood.predict(features)
+    preds_energy = model_energy.predict(features)
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(y=target_mood, mode='markers', name='Actual Mood 48h'))
+    fig.add_trace(go.Scatter(y=preds_mood, mode='lines', name='Predicted Mood 48h'))
+    fig.add_trace(go.Scatter(y=target_energy, mode='markers', name='Actual Energy 48h'))
+    fig.add_trace(go.Scatter(y=preds_energy, mode='lines', name='Predicted Energy 48h'))
+
+    fig.update_layout(
+        title=f"Predictions from uploaded file: {filename}",
+        yaxis_title="Level (1-10)",
+        plot_bgcolor='black',
+        paper_bgcolor='black',
+        font=dict(color='white', size=14)
+    )
+
+    insight_text = "✅ Model trained on your data! Actual vs predicted mood and energy at 48h shown."
+
+    return fig, insight_text
 
 
 if __name__ == '__main__':
