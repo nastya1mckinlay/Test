@@ -23,7 +23,7 @@ scenario_options = [
 ]
 
 # Time horizons (hours) from your column suffixes
-horizons = [2, 6, 12, 24, 48]
+horizons = [0, 2, 6, 12, 24, 48]  # Added 0 for current time
 
 app = dash.Dash(__name__)
 server = app.server
@@ -46,7 +46,6 @@ app.layout = html.Div([
 
     html.Hr(),
     html.H3("Add Your Data (User Mode) - Coming Soon!"),
-    # You can extend input forms here for user input if desired.
 ])
 
 @app.callback(
@@ -61,9 +60,9 @@ def update_trends(selected_idx):
     # Select row by index
     row = mood_energy_df.iloc[selected_idx]
 
-    # Extract mood and energy values at horizons
-    mood_vals = [row[f"mood_{h}h"] for h in horizons]
-    energy_vals = [row[f"energy_{h}h"] for h in horizons]
+    # Extract mood and energy values including time 0 now
+    mood_vals = [row["mood_now"]] + [row[f"mood_{h}h"] for h in horizons if h != 0]
+    energy_vals = [row["energy_now"]] + [row[f"energy_{h}h"] for h in horizons if h != 0]
 
     # Create traces for mood and energy
     fig = go.Figure()
