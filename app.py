@@ -1,111 +1,119 @@
 import dash
 from dash import dcc, html, Input, Output, State
 import pandas as pd
+import plotly.graph_objs as go
 import datetime
-import plotly.graph_objects as go
 import os
-import time
+
+# Load your mood_energy_dataset.csv with your columns
+DATA_FILE = "mood_energy_dataset.csv"
+if os.path.exists(DATA_FILE):
+    mood_energy_df = pd.read_csv(DATA_FILE)
+    mood_energy_df['datetime'] = pd.to_datetime(mood_energy_df['datetime'])
+else:
+    mood_energy_df = pd.DataFrame()  # fallback empty
+
+# Generate scenario options dynamically from food + exercise_type + duration
+scenario_options = [
+    {
+        'label': f"{row['food']} + {row['exercise_type']} ({row['exercise_duration']} mins)",
+        'value': idx
+    }
+    for idx, row in mood_energy_df.iterrows()
+]
+
+# Time horizons (hours) from your column suffixes
+horizons = [2, 6, 12, 24, 48]
 
 app = dash.Dash(__name__)
 server = app.server
 
-DATA_FILE = "data.csv"
-MOOD_ENERGY_FILE = "mood_energy_dataset.csv"
-
-food_tags = ['Healthy', 'Sugary', 'Junk', 'Protein', 'Carbs']
-activities = ['None', 'Low Exercise', 'Moderate Exercise', 'High Exercise', 'Outdoors', 'Socializing', 'Gaming', 'Studying', 'Party']
-
-# Load mood_energy dataset for scenarios
-mood_energy_df = pd.read_csv(MOOD_ENERGY_FILE)
-scenario_options = [{'label': row['Scenario'], 'value': row['Scenario']} for _, row in mood_energy_df.iterrows()]
-
-# Layout
 app.layout = html.Div([
-    html.H1("🌟 MindFuel Mood & Energy Trends"),
+    html.H1("Mood & Energy Trends Dashboard"),
 
     html.Label("Select Scenario:"),
     dcc.Dropdown(
         id="scenario-dropdown",
         options=scenario_options,
-        value=scenario_options[0]['value'],  # Default to first scenario
+        value=scenario_options[0]['value'] if scenario_options else None,
         clearable=False,
-        style={"width": "400px", "marginBottom": "20px"},
+        style={"width": "60%"}
     ),
 
     dcc.Graph(id="trend-graph"),
 
-    # Your other existing UI elements here like user/demo data inputs, buttons etc...
+    html.Div(id="insight-output", style={"marginTop": "20px", "fontSize": "18px"}),
+
+    html.Hr(),
+    html.H3("Add Your Data (User Mode) - Coming Soon!"),
+    # You can extend input forms here for user input if desired.
 ])
 
-# Callback to update graph when scenario changes
 @app.callback(
     Output("trend-graph", "figure"),
-    Input("scenario-dropdown", "value")
+    Output("insight-output", "children"),
+    Input("scenario-dropdown", "value"),
 )
-def update_trend_graph(selected_scenario):
-    if not selected_scenario:
-        return go.Figure()
+def update_trends(selected_idx):
+    if selected_idx is None or mood_energy_df.empty:
+        return go.Figure(), "No data available."
 
-    # Filter dataset for selected scenario
-    row = mood_energy_df[mood_energy_df['Scenario'] == selected_scenario].iloc[0]
+    # Select row by index
+    row = mood_energy_df.iloc[selected_idx]
 
-    horizons = [2, 6, 12, 24, 48]
-    mood_cols = [f"mood_{h}h" for h in horizons]
-    energy_cols = [f"energy_{h}h" for h in horizons]
+    # Extract mood and energy values at horizons
+    mood_vals = [row[f"mood_{h}h"] for h in horizons]
+    energy_vals = [row[f"energy_{h}h"] for h in horizons]
 
-    mood_vals = row[mood_cols].values.astype(float)
-    energy_vals = row[energy_cols].values.astype(float)
-
+    # Create traces for mood and energy
     fig = go.Figure()
 
     fig.add_trace(go.Scatter(
-        x=horizons,
-        y=mood_vals,
-        mode="lines+markers",
+        x=horizons, y=mood_vals,
+        mode='lines+markers',
         name="Mood",
-        line=dict(color="#00e5ff", width=3),
-        marker=dict(size=8),
+        line=dict(color="cyan", width=3),
+        marker=dict(symbol='circle', size=10)
     ))
 
     fig.add_trace(go.Scatter(
-        x=horizons,
-        y=energy_vals,
-        mode="lines+markers",
+        x=horizons, y=energy_vals,
+        mode='lines+markers',
         name="Energy",
-        line=dict(color="#ff4081", width=3),
-        marker=dict(size=8, symbol="square"),
+        line=dict(color="magenta", width=3),
+        marker=dict(symbol='square', size=10)
     ))
 
-    # Fill area between mood and energy with different colors
-    fillcolor = ["#ffee58" if m >= e else "#69f0ae" for m, e in zip(mood_vals, energy_vals)]
-    shapes = []
-    for i in range(len(horizons) - 1):
-        shapes.append(dict(
-            type="rect",
-            xref="x",
-            yref="y",
-            x0=horizons[i],
-            y0=min(mood_vals[i], energy_vals[i]),
-            x1=horizons[i + 1],
-            y1=max(mood_vals[i], energy_vals[i]),
-            fillcolor=fillcolor[i],
-            opacity=0.15,
-            line_width=0,
-            layer="below",
-        ))
-    fig.update_layout(shapes=shapes)
-
     fig.update_layout(
-        title=f"Mood & Energy Trends: {selected_scenario}",
+        title=f"Mood & Energy Trends for: {row['food']} + {row['exercise_type']} ({row['exercise_duration']} mins)",
         xaxis_title="Hours Ahead",
         yaxis_title="Level (1-10)",
+        xaxis=dict(tickmode='array', tickvals=horizons),
         yaxis=dict(range=[0, 10]),
-        template="plotly_dark",
-        hovermode="x unified",
-        legend=dict(font=dict(size=14)),
-        margin=dict(t=50, b=40, l=40, r=20),
+        plot_bgcolor='black',
+        paper_bgcolor='black',
+        font=dict(color='white', size=14)
     )
-    return fig
 
-if __name__ == "__main__":
+    # Insights
+    insights = []
+    if "sugary" in str(row['food']).lower() or "junk" in str(row['food']).lower():
+        insights.append("⚠️ High sugar or junk food detected, mood and energy may drop quickly.")
+    if "protein" in str(row['food']).lower():
+        insights.append("💪 Protein-rich food linked to more stable mood and energy.")
+    if "exercise" in str(row['exercise_type']).lower():
+        duration = row['exercise_duration']
+        if duration < 30:
+            insights.append("🏃‍♂️ Moderate exercise can help maintain mood and energy.")
+        else:
+            insights.append("🏅 High exercise duration: mood stabilizes but energy might drop faster.")
+    if not insights:
+        insights.append("📝 Keep tracking your mood and energy for personalized insights.")
+
+    insight_html = html.Ul([html.Li(i) for i in insights])
+
+    return fig, insight_html
+
+
+if __name__ == '__main__':
     app.run_server(debug=True)
