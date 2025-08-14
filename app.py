@@ -31,7 +31,7 @@ app = dash.Dash(__name__)
 server = app.server
 
 app.layout = html.Div([
-    html.H1("Mood & Energy Trends Dashboard" by Anastasia McKinlay),
+    html.H1("Mood & Energy Trends Dashboard by Anastasia McKinlay"),
 
     html.Label("Select Scenario:"),
     dcc.Dropdown(
